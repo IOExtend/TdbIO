@@ -80,8 +80,8 @@ offset or line number. A warning never contains text from the file. Warnings are
 
 | Type | Use |
 | --- | --- |
-| `TableSection` | A section of fixed-size rows, from `Db1Document.ReadTables()` or `DbvDocument.Sections`. `Ordinal`, `Offset`, `End`, `Key` (schema table number in `.db1`, else null), `RowSize`, `Descriptors` (primary and secondary index specifications), `RowsOffset` and `Rows`. `Rows` is a view over the data: a row is built when it is read. |
-| `TableRow` | `Offset` (of the marker byte), `Marker` (0x04 active, 0x0C deleted/superseded in `.db1`), `Body` (`RowSize` raw bytes), `A` / `CreationTimeId` (creation transaction TimeId) and `B` / `DeletionTimeId` (deletion or superseding transaction TimeId). `IsActive` and `IsDeleted` inspect the marker. |
+| `TableSection` | A section of fixed-size rows, from `Db1Document.ReadTables()` or `DbvDocument.Sections`. `Ordinal`, `Offset`, `End`, `Key` (schema table number in `.db1`, else null), `RowSize`, `Descriptors` (primary and secondary index specifications), `RowsOffset` and `Rows`. `Rows` is a view over the data: a row is built when it is read. Typed bulk decoders (`AsObjects()`, `AsParts()`, `AsPoints()`, etc.) decode all rows into typed record structs. |
+| `TableRow` | `Offset` (of the marker byte), `Marker` (0x04 active, 0x0C deleted/superseded in `.db1`), `Body` (`RowSize` raw bytes), `A` / `CreationTimeId` (creation transaction TimeId) and `B` / `DeletionTimeId` (deletion or superseding transaction TimeId). `IsActive` and `IsDeleted` inspect the marker. Typed decoders (`AsObject()`, `AsPart()`, `AsPoint()`, etc.) decode the row body into typed record structs. |
 | `DbvDocument` | A DBV@ file: `Name`, `DomainId` (`Prologue[1]`), `Generation` (`ListHeader[3]`), `BaseOffset` (`B`), `EventLevel` (`C`), `CurrentOffset` (`T[1]`), `LastEventOffset` (`T[4]`), `Prologue`, `ListHeader`, `GuidRecords`, `B`, `C`, `L1`, `L2`, `T`, `C9Records`, `Sections` and `Payload`. The raw numbers are preserved; named aliases identify the domain, generation and event offsets. |
 | `DbvGuidRecord` | `Value` (raw), `Index` (1-based, checked against the position) and `Id`. |
 | `DbvC9Record` | A record that starts with `C9 C0 CE DB`: four raw numbers `R0` to `R3`. |
@@ -89,6 +89,34 @@ offset or line number. A warning never contains text from the file. Warnings are
 The walk of a model database starts at its first table section and must end exactly at the end of `Payload`; a section
 without a key after one with a key, a gap or bytes after the last section is an error. The bytes before the first
 section, other than the header and the id map, are not interpreted; read them from `Payload`.
+
+## Decoded table rows
+
+Typed record structs decoded from the row bodies of the most common model database table sections:
+
+| Type | Table Key | Size | Contents |
+| --- | --- | --- | --- |
+| `ObjectRow` | 1 | 72 | `Id`, `ParentId` (`kuuluu`), `AssemblyId`, `Guid` (128-bit RFC 4122), `Type`, `Subtype`, `ExternalType`, `Mask1`, `Mask2`, `ObjFlag`, `OwnerId`, `PrivilegeId`. |
+| `AssemblyRow` | 2 | 92 | `Id`, `Type`, `Class`, `MainPartId` (`dum`), `Lot`, `Name`, `Flags`, `MainPartByUser`. |
+| `CoordsysRow` | 3 | 40 | `Id`, `AttrId`, origin coordinates `X`, `Y`, `Z`, `Length`. |
+| `PartRow` | 10 | 64 | `Id`, `PartAttrId`, `PositioningAttrId`, `StartPointId` (`p1`), `EndPointId` (`p2`), `GeometryTreeRootId`, `CoordsysAttrId`, `Reserved`, local coordinate system `CoordsysX`, `CoordsysY`, `CoordsysZ`, `Length`. |
+| `PointRow` | 13 | 32 | `Id`, `Visibility`, 3D coordinates `X`, `Y`, `Z` in millimeters. |
+| `RelationRow` | 16 | 60 | `Id`, `Type`, `Id1`, `Id2`, `Guid` (string), `Flags`. |
+| `WeldingRow` | 20 | 24 | `Id`, `CommonAttrId`, `Seam1Id`, `Seam2Id`, `CompoundSeam1Id`, `CompoundSeam2Id`. |
+| `NumAttrRow` | 38 | 24 | `Id`, `AttrId`, `FatherId`, `OwnerId`, `Flags`, `NameId`. |
+| `StrAttrRow` | 39 | 24 | `Id`, `AttrId`, `FatherId`, `OwnerId`, `Flags`, `NameId`. |
+| `PartAttrRow` | 44 | 372 | `Id`, `ObjType`, `FormType`, `ObjClass`, `AssStartNo`, `Flags`, `NPoints`, `PartFlags`, `Prefix`, `Name`, `Profile`, `ParameterStringId`, `AssemblyPosition`, `AssemblyName`, `Material`, `Finish`, `AssemblyType`, `PourPhase`. |
+| `NumAttrAttrRow` | 48 | 44 | `Id`, `Type`, `Value` (double), `Name`, `PrivilegeId`. |
+| `StrAttrAttrRow` | 49 | 120 | `Id`, `Type`, `Name`, `Value` (string), `ValueId`, `PrivilegeId`. |
+| `StringPoolRow` | 50 | 45 | `Id`, `NextId`, `HashId`, `RefCount`, `Text`. |
+| `PartNumberingRow` | 94 | 68 | `Id`, `SeriesId`, `StartNumber`, `FPos`, `MultiFPos`, `Prefix`. |
+| `AssemblyNumberingRow` | 95 | 76 | `Id`, `SeriesId`, `StartNumber`, `FPos`, `FamilyFPos`, `QualifierFPos`, `MultiFPos`, `Prefix`. |
+| `ObjectNumberingRow` | 105 | 12 | `Id`, `NumberId`, `NumberingGroup`. |
+| `BoltRow` | 107 | 24 | `Id`, `BoltAttrId`, `PositioningAttrId`, `FirstPointId` (`p1`), `SecondPointId` (`p2`), `PolygonId`. |
+| `ObjectModificationRow` | 132 | 20 | `ModificationId`, `Id`, `ModType`, `DependencyId`, `ModTime`. |
+| `BoltHoleRow` | 140 | 48 | `BoltId`, `No`, `PartId`, `PointZ`, `Length`, `LongHoleDir`, `LongHoleType`, `ShorteningLength`. |
+| `ObjectPhaseRow` | 141 | 8 | `ObjectId`, `PhaseNumber`. |
+| `BoltHolePointsRow` | 142 | 60 | `BoltId`, intermediate coordinates `IntPoint1X`, `IntPoint1Y`, `IntPoint1Z`, `IntPoint2X`, `IntPoint2Y`, `IntPoint2Z`, `NumHoles`. |
 
 ## Files next to the model
 
