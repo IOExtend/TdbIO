@@ -461,6 +461,102 @@ public sealed class CliTests : IDisposable
         Assert.StartsWith("ISO-10303-21;", stdoutIfc);
     }
 
+    [Fact]
+    public void Export_RejectsOutputPathIdenticalToInputFile()
+    {
+        var objBytes = new byte[ObjectRow.ExpectedRowSize];
+        BinaryPrimitives.WriteInt32LittleEndian(objBytes.AsSpan(0), 101);
+        BinaryPrimitives.WriteInt32LittleEndian(objBytes.AsSpan(28), 1);
+
+        byte[] unkeyedSec = Db1Section(null, 4, [1], (0x04, Counting(4), 1, 2));
+        byte[] objSec = Db1Section(ObjectRow.TableKey, ObjectRow.ExpectedRowSize, [1], (0x04, objBytes, 1, 2));
+
+        byte[] originalContent = Gzip(Db1TablesPayload(unkeyedSec, objSec));
+        string inputFile = File("identity_test.db1", originalContent);
+
+        // Identical path
+        var (exit1, _, err1) = Run("export", inputFile, inputFile);
+        Assert.Equal(Cli.ExitUsage, exit1);
+        Assert.Contains("The output file path must not be the same as the input file.", err1);
+        Assert.Equal(originalContent, System.IO.File.ReadAllBytes(inputFile));
+
+        // Redundant relative segments resolving to the same file
+        string redundantPath = Path.Combine(Path.GetDirectoryName(inputFile)!, ".", Path.GetFileName(inputFile));
+        var (exit2, _, err2) = Run("export", inputFile, redundantPath);
+        Assert.Equal(Cli.ExitUsage, exit2);
+        Assert.Contains("The output file path must not be the same as the input file.", err2);
+        Assert.Equal(originalContent, System.IO.File.ReadAllBytes(inputFile));
+    }
+
+    [Fact]
+    public void Export_PreservesPreviousDestinationWhenConversionFails()
+    {
+        var objBytes = new byte[ObjectRow.ExpectedRowSize];
+        BinaryPrimitives.WriteInt32LittleEndian(objBytes.AsSpan(0), 101);
+        BinaryPrimitives.WriteInt32LittleEndian(objBytes.AsSpan(28), 1);
+
+        var partBytes = new byte[PartRow.ExpectedRowSize];
+        BinaryPrimitives.WriteInt32LittleEndian(partBytes.AsSpan(0), 101);
+        BinaryPrimitives.WriteDoubleLittleEndian(partBytes.AsSpan(56), double.NaN); // NaN in length
+
+        byte[] unkeyedSec = Db1Section(null, 4, [1], (0x04, Counting(4), 1, 2));
+        byte[] objSec = Db1Section(ObjectRow.TableKey, ObjectRow.ExpectedRowSize, [1], (0x04, objBytes, 1, 2));
+        byte[] partSec = Db1Section(PartRow.TableKey, PartRow.ExpectedRowSize, [1], (0x04, partBytes, 1, 2));
+
+        string nanFile = File("nan_length.db1", Gzip(Db1TablesPayload(unkeyedSec, objSec, partSec)));
+        string destFile = Path.Combine(_folder, "existing_report.txt");
+        const string sentinel = "EXISTING_REPORT";
+        System.IO.File.WriteAllText(destFile, sentinel);
+
+        var (exit, _, err) = Run("export", nanFile, destFile);
+        Assert.Equal(Cli.ExitInput, exit);
+        Assert.Contains("Non-finite number", err);
+        Assert.Equal(sentinel, System.IO.File.ReadAllText(destFile));
+    }
+
+    [Fact]
+    public void Export_RejectsNonFiniteModelDataAcrossRenderers()
+    {
+        var objBytes = new byte[ObjectRow.ExpectedRowSize];
+        BinaryPrimitives.WriteInt32LittleEndian(objBytes.AsSpan(0), 101);
+        BinaryPrimitives.WriteInt32LittleEndian(objBytes.AsSpan(28), 1);
+
+        var pointBytes = new byte[PointRow.ExpectedRowSize];
+        BinaryPrimitives.WriteInt32LittleEndian(pointBytes.AsSpan(0), 201);
+        BinaryPrimitives.WriteDoubleLittleEndian(pointBytes.AsSpan(8), double.NaN); // NaN in point X
+
+        var partBytes = new byte[PartRow.ExpectedRowSize];
+        BinaryPrimitives.WriteInt32LittleEndian(partBytes.AsSpan(0), 101);
+        BinaryPrimitives.WriteInt32LittleEndian(partBytes.AsSpan(16), 201); // EndPointId = 201
+        BinaryPrimitives.WriteDoubleLittleEndian(partBytes.AsSpan(56), 1000.0);
+
+        byte[] unkeyedSec = Db1Section(null, 4, [1], (0x04, Counting(4), 1, 2));
+        byte[] objSec = Db1Section(ObjectRow.TableKey, ObjectRow.ExpectedRowSize, [1], (0x04, objBytes, 1, 2));
+        byte[] ptSec = Db1Section(PointRow.TableKey, PointRow.ExpectedRowSize, [1], (0x04, pointBytes, 1, 2));
+        byte[] partSec = Db1Section(PartRow.TableKey, PartRow.ExpectedRowSize, [1], (0x04, partBytes, 1, 2));
+
+        string nanCoordFile = File("nan_coord.db1", Gzip(Db1TablesPayload(unkeyedSec, objSec, ptSec, partSec)));
+
+        // 1. Scene JSON export rejected
+        var (sceneExit, _, sceneErr) = Run("export", nanCoordFile, "--scene-json");
+        Assert.Equal(Cli.ExitInput, sceneExit);
+        Assert.Contains("Non-finite number", sceneErr);
+        Assert.Contains("offset", sceneErr);
+
+        // 2. IFC export rejected
+        var (ifcExit, _, ifcErr) = Run("export", nanCoordFile, "--ifc");
+        Assert.Equal(Cli.ExitInput, ifcExit);
+        Assert.Contains("Non-finite number", ifcErr);
+        Assert.Contains("offset", ifcErr);
+
+        // 3. HTML export rejected and output file not created
+        string htmlPath = Path.Combine(_folder, "should_not_exist.html");
+        var (htmlExit, _, htmlErr) = Run("export", nanCoordFile, htmlPath);
+        Assert.Equal(Cli.ExitInput, htmlExit);
+        Assert.Contains("Non-finite number", htmlErr);
+        Assert.False(System.IO.File.Exists(htmlPath));
+    }
+
     private static void AssertInputError(params string[] args)
     {
         var (exit, stdout, stderr) = Run(args);

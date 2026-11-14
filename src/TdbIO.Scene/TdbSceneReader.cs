@@ -60,6 +60,7 @@ public static class TdbSceneReader
 
     private static TdbSceneResult Convert(TeklaModel model, string key, string? path, TdbSceneOptions? options)
     {
+        model.ValidateFiniteNumbers();
         options ??= new TdbSceneOptions();
         var scene = new SceneDocument { Title = key };
 

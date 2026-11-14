@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using TdbIO.Internal.Export;
 using Xunit;
@@ -241,5 +242,214 @@ public sealed class IfcExportTests
             bolts: [bolt],
             welds: [weld],
             objects: [beam, column, plate, assembly, bolt, weld]);
+    }
+
+    [Fact]
+    public void StepWriter_RealExact_PreservesSmallPrecision_AndValidStepSyntax()
+    {
+        double small = 1e-8;
+        string formatted = StepWriter.RealExact(small);
+        Assert.Equal("1.E-08", formatted);
+
+        // Valid ISO 10303-21 STEP real syntax: must contain a decimal point in the mantissa
+        int expIndex = formatted.IndexOfAny(['E', 'e']);
+        Assert.True(expIndex > 0);
+        Assert.Contains('.', formatted[..expIndex]);
+
+        // Round-trip parse back to double
+        double parsed = double.Parse(formatted, CultureInfo.InvariantCulture);
+        Assert.Equal(small, parsed);
+    }
+
+    [Fact]
+    public void Ifc_SchemaConformance_Ifc2x3()
+    {
+        var model = CreateSyntheticModel();
+        string ifc = model.ToIfc(new TeklaIfcExportOptions { SchemaVersion = "IFC2X3" });
+        var entities = ParseIfcEntities(ifc);
+
+        var buildings = entities.Values.Where(e => e.Type == "IFCBUILDING").ToList();
+        Assert.NotEmpty(buildings);
+        Assert.All(buildings, b => Assert.Equal(12, b.Args.Count));
+
+        var assemblies = entities.Values.Where(e => e.Type == "IFCELEMENTASSEMBLY").ToList();
+        Assert.NotEmpty(assemblies);
+        Assert.All(assemblies, a => Assert.Equal(10, a.Args.Count));
+
+        var materials = entities.Values.Where(e => e.Type == "IFCMATERIAL").ToList();
+        Assert.NotEmpty(materials);
+        Assert.All(materials, m => Assert.Single(m.Args));
+
+        var bolts = entities.Values.Where(e => e.Type == "IFCMECHANICALFASTENER").ToList();
+        Assert.NotEmpty(bolts);
+        Assert.All(bolts, b => Assert.Equal(10, b.Args.Count));
+
+        var welds = entities.Values.Where(e => e.Type == "IFCFASTENER").ToList();
+        Assert.NotEmpty(welds);
+        Assert.All(welds, w => Assert.Equal(8, w.Args.Count));
+    }
+
+    [Fact]
+    public void Ifc_SchemaConformance_Ifc4()
+    {
+        var model = CreateSyntheticModel();
+        string ifc = model.ToIfc(new TeklaIfcExportOptions { SchemaVersion = "IFC4" });
+        var entities = ParseIfcEntities(ifc);
+
+        var buildings = entities.Values.Where(e => e.Type == "IFCBUILDING").ToList();
+        Assert.NotEmpty(buildings);
+        Assert.All(buildings, b => Assert.Equal(12, b.Args.Count));
+
+        var assemblies = entities.Values.Where(e => e.Type == "IFCELEMENTASSEMBLY").ToList();
+        Assert.NotEmpty(assemblies);
+        Assert.All(assemblies, a => Assert.Equal(10, a.Args.Count));
+
+        var materials = entities.Values.Where(e => e.Type == "IFCMATERIAL").ToList();
+        Assert.NotEmpty(materials);
+        Assert.All(materials, m => Assert.Equal(3, m.Args.Count));
+
+        var bolts = entities.Values.Where(e => e.Type == "IFCMECHANICALFASTENER").ToList();
+        Assert.NotEmpty(bolts);
+        Assert.All(bolts, b =>
+        {
+            Assert.Equal(11, b.Args.Count);
+            Assert.Equal(".BOLT.", b.Args[10]);
+        });
+
+        var welds = entities.Values.Where(e => e.Type == "IFCFASTENER").ToList();
+        Assert.NotEmpty(welds);
+        Assert.All(welds, w =>
+        {
+            Assert.Equal(9, w.Args.Count);
+            Assert.Equal(".WELD.", w.Args[8]);
+        });
+
+        var plates = entities.Values.Where(e => e.Type == "IFCPLATE").ToList();
+        Assert.NotEmpty(plates);
+        Assert.All(plates, p =>
+        {
+            Assert.Equal(9, p.Args.Count);
+            Assert.NotEqual(".PLATE.", p.Args[8]);
+            Assert.Equal(".NOTDEFINED.", p.Args[8]);
+        });
+    }
+
+    [Fact]
+    public void Ifc_ExportGeometryFalse_OmitsProductDefinitionShape()
+    {
+        var model = CreateSyntheticModel();
+        string ifc = model.ToIfc(new TeklaIfcExportOptions { ExportGeometry = false });
+        var entities = ParseIfcEntities(ifc);
+
+        Assert.DoesNotContain(entities.Values, e => e.Type == "IFCPRODUCTDEFINITIONSHAPE");
+
+        var beams = entities.Values.Where(e => e.Type == "IFCBEAM").ToList();
+        Assert.NotEmpty(beams);
+        Assert.All(beams, b => Assert.Equal("$", b.Args[6]));
+
+        var columns = entities.Values.Where(e => e.Type == "IFCCOLUMN").ToList();
+        Assert.NotEmpty(columns);
+        Assert.All(columns, c => Assert.Equal("$", c.Args[6]));
+    }
+
+    [Fact]
+    public void Ifc_Units_ConvertMmToMetres_ScalesLengthAndDeclaresUnit()
+    {
+        var model = CreateSyntheticModel();
+
+        // 1. ConvertMmToMetres = true (default)
+        string ifcM = model.ToIfc(new TeklaIfcExportOptions { ConvertMmToMetres = true });
+        Assert.Contains("IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);", ifcM);
+        Assert.Contains("IFCLENGTHMEASURE(6.)", ifcM);
+        Assert.DoesNotContain("IFCLENGTHMEASURE(6000.)", ifcM);
+
+        // 2. ConvertMmToMetres = false
+        string ifcMm = model.ToIfc(new TeklaIfcExportOptions { ConvertMmToMetres = false });
+        Assert.Contains("IFCSIUNIT(*,.LENGTHUNIT.,.MILLI.,.METRE.);", ifcMm);
+        Assert.Contains("IFCLENGTHMEASURE(6000.)", ifcMm);
+    }
+
+    [Fact]
+    public void Ifc_GuidEmpty_Matches_IOScene_IfcGuid()
+    {
+        var p0 = new ModelPoint(1, 0, 0, 0);
+        var p1 = new ModelPoint(2, 1000, 0, 0);
+        var part = new ModelPart(1, Guid.Empty, 1, 0, 1, null, null, "PART", "PL10", "S235", "", 1, 1, 1, "", p0, p1, 1000, null);
+        var asm = new ModelAssembly(2, Guid.Empty, 2, 0, 1, null, "ASM", "A", 1, 1, 0, 1);
+        var bolt = new ModelBolt(3, Guid.Empty, 9, 0, 1, null, null, p0, p1, [], []);
+        var weld = new ModelWeld(4, Guid.Empty, 13, 0, 1, null, null, 1);
+
+        var doc = Db1Document.Create(Synthetic.Db1Payload([]));
+        var model = new TeklaModel(doc, Guid.Empty, [asm], [part], [bolt], [weld], [part, asm, bolt, weld]);
+
+        string ifc = model.ToIfc();
+        var entities = ParseIfcEntities(ifc);
+
+        var ifcPart = Assert.Single(entities.Values, e => e.Type == "IFCPLATE" || e.Type == "IFCMEMBER");
+        Assert.Equal($"'{part.IfcGuid}'", ifcPart.Args[0]);
+
+        var ifcAsm = Assert.Single(entities.Values, e => e.Type == "IFCELEMENTASSEMBLY");
+        Assert.Equal($"'{asm.IfcGuid}'", ifcAsm.Args[0]);
+
+        var ifcBolt = Assert.Single(entities.Values, e => e.Type == "IFCMECHANICALFASTENER");
+        Assert.Equal($"'{bolt.IfcGuid}'", ifcBolt.Args[0]);
+
+        var ifcWeld = Assert.Single(entities.Values, e => e.Type == "IFCFASTENER");
+        Assert.Equal($"'{weld.IfcGuid}'", ifcWeld.Args[0]);
+    }
+
+    private static List<string> ParseStepArgs(string argsText)
+    {
+        var list = new List<string>();
+        int depth = 0;
+        bool inQuote = false;
+        int start = 0;
+        for (int i = 0; i < argsText.Length; i++)
+        {
+            char c = argsText[i];
+            if (c == '\'')
+            {
+                if (inQuote && i + 1 < argsText.Length && argsText[i + 1] == '\'')
+                {
+                    i++; // skip escaped quote ''
+                }
+                else
+                {
+                    inQuote = !inQuote;
+                }
+            }
+            else if (!inQuote)
+            {
+                if (c == '(') depth++;
+                else if (c == ')') depth--;
+                else if (c == ',' && depth == 0)
+                {
+                    list.Add(argsText[start..i].Trim());
+                    start = i + 1;
+                }
+            }
+        }
+        list.Add(argsText[start..].Trim());
+        return list;
+    }
+
+    private static Dictionary<int, (string Type, List<string> Args)> ParseIfcEntities(string ifc)
+    {
+        var dict = new Dictionary<int, (string Type, List<string> Args)>();
+        foreach (var line in ifc.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (!line.StartsWith('#')) continue;
+            int eq = line.IndexOf('=');
+            if (eq < 0) continue;
+            int id = int.Parse(line[1..eq].Trim(), CultureInfo.InvariantCulture);
+            int openParen = line.IndexOf('(', eq);
+            int closeParen = line.LastIndexOf(')');
+            if (openParen < 0 || closeParen <= openParen) continue;
+            string type = line[(eq + 1)..openParen].Trim();
+            string argsText = line[(openParen + 1)..closeParen];
+            var args = ParseStepArgs(argsText);
+            dict[id] = (type, args);
+        }
+        return dict;
     }
 }

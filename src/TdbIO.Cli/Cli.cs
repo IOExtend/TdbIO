@@ -182,6 +182,16 @@ internal static class Cli
 
         if (name == "export")
         {
+            if (outputPath != null)
+            {
+                string fullInput = Path.GetFullPath(path);
+                string fullOutput = Path.GetFullPath(outputPath);
+                if (string.Equals(fullInput, fullOutput, OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                {
+                    throw new UsageException("The output file path must not be the same as the input file.");
+                }
+            }
+
             int formatFlags = (sceneJson ? 1 : 0) + (ifc ? 1 : 0) + (html ? 1 : 0);
             if (formatFlags > 1)
             {
@@ -372,12 +382,13 @@ internal static class Cli
     {
         if (doc is not Db1Document db1) throw new WrongKindException($"'export' needs a model database (.db1), not {doc.Kind}.");
         var model = db1.ReadModel();
+        model.ValidateFiniteNumbers();
 
         if (cmd.Ifc)
         {
             if (cmd.OutputPath != null)
             {
-                model.WriteIfc(cmd.OutputPath);
+                WriteFileAtomically(cmd.OutputPath, tmp => model.WriteIfc(tmp));
             }
             else
             {
@@ -394,7 +405,7 @@ internal static class Cli
             {
                 ModelKey = Path.GetFileNameWithoutExtension(cmd.Path)
             });
-            HtmlViewerExporter.Save(sceneResult.Document, cmd.OutputPath);
+            WriteFileAtomically(cmd.OutputPath, tmp => HtmlViewerExporter.Save(sceneResult.Document, tmp));
         }
         else if (cmd.SceneJson)
         {
@@ -402,16 +413,22 @@ internal static class Cli
             {
                 ModelKey = Path.GetFileNameWithoutExtension(cmd.Path)
             });
-            if (cmd.OutputPath != null && !cmd.Indent)
+            if (cmd.OutputPath != null)
             {
-                SceneJson.Save(sceneResult.Document, cmd.OutputPath);
-            }
-            else if (cmd.OutputPath != null)
-            {
-                using var fs = File.Create(cmd.OutputPath);
-                var options = SceneJson.CreateOptions();
-                options.WriteIndented = true;
-                System.Text.Json.JsonSerializer.Serialize(fs, sceneResult.Document, options);
+                WriteFileAtomically(cmd.OutputPath, tmp =>
+                {
+                    if (cmd.Indent)
+                    {
+                        using var fs = File.Create(tmp);
+                        var options = SceneJson.CreateOptions();
+                        options.WriteIndented = true;
+                        System.Text.Json.JsonSerializer.Serialize(fs, sceneResult.Document, options);
+                    }
+                    else
+                    {
+                        SceneJson.Save(sceneResult.Document, tmp);
+                    }
+                });
             }
             else if (cmd.Indent)
             {
@@ -428,12 +445,38 @@ internal static class Cli
         {
             if (cmd.OutputPath != null)
             {
-                using var fs = File.Create(cmd.OutputPath);
-                model.WriteJson(fs, cmd.Indent);
+                WriteFileAtomically(cmd.OutputPath, tmp =>
+                {
+                    using var fs = File.Create(tmp);
+                    model.WriteJson(fs, cmd.Indent);
+                });
             }
             else
             {
                 w.WriteLine(model.ToJson(cmd.Indent));
+            }
+        }
+    }
+
+    private static void WriteFileAtomically(string outputPath, Action<string> writeAction)
+    {
+        string fullPath = Path.GetFullPath(outputPath);
+        string? dir = Path.GetDirectoryName(fullPath);
+        if (string.IsNullOrEmpty(dir))
+        {
+            dir = ".";
+        }
+        string tempPath = Path.Combine(dir, $".{Path.GetFileName(fullPath)}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            writeAction(tempPath);
+            File.Move(tempPath, fullPath, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(tempPath))
+            {
+                try { File.Delete(tempPath); } catch { /* ignore temp cleanup error */ }
             }
         }
     }

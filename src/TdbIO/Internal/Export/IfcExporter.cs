@@ -51,6 +51,8 @@ internal static class IfcExporter
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(writer);
 
+        model.ValidateFiniteNumbers();
+
         options ??= new TeklaIfcExportOptions();
         fileName ??= "model.ifc";
 
@@ -71,7 +73,7 @@ internal static class IfcExporter
             $"{StepWriter.Ref(personOrgId)},{StepWriter.Ref(appId)},.READWRITE.,.NOCHANGE.,$,$,$,{epochSeconds}");
 
         // 2. Units & Geometric Context
-        int lengthUnitId = w.Add("IFCSIUNIT", "*,.LENGTHUNIT.,$,.METRE.");
+        int lengthUnitId = w.Add("IFCSIUNIT", options.ConvertMmToMetres ? "*,.LENGTHUNIT.,$,.METRE." : "*,.LENGTHUNIT.,.MILLI.,.METRE.");
         int radianId = w.Add("IFCSIUNIT", "*,.PLANEANGLEUNIT.,$,.RADIAN.");
         int dimExpId = w.Add("IFCDIMENSIONALEXPONENTS", "0,0,0,0,0,0,0");
         int angleMeasureId = w.Add("IFCMEASUREWITHUNIT", $"IFCPLANEANGLEMEASURE({DegreeInRadians}),{StepWriter.Ref(radianId)}");
@@ -112,7 +114,7 @@ internal static class IfcExporter
 
         int buildingPlacementId = w.Add("IFCLOCALPLACEMENT", $"{StepWriter.Ref(sitePlacementId)},{StepWriter.Ref(worldPlacement3dId)}");
         int buildingId = w.Add("IFCBUILDING",
-            $"{StepWriter.Str(IfcGuid.NewGuid())},{StepWriter.Ref(ownerHistoryId)},{StepWriter.Str(buildingName)},$,$,{StepWriter.Ref(buildingPlacementId)},$,$,.ELEMENT.,$,$,$,$");
+            $"{StepWriter.Str(IfcGuid.NewGuid())},{StepWriter.Ref(ownerHistoryId)},{StepWriter.Str(buildingName)},$,$,{StepWriter.Ref(buildingPlacementId)},$,$,.ELEMENT.,$,$,$");
 
         int storeyPlacementId = w.Add("IFCLOCALPLACEMENT", $"{StepWriter.Ref(buildingPlacementId)},{StepWriter.Ref(worldPlacement3dId)}");
         int storeyId = w.Add("IFCBUILDINGSTOREY",
@@ -145,15 +147,15 @@ internal static class IfcExporter
                     $"{StepWriter.Ref(bodySubContextId)},'Body','Brep',({StepWriter.Ref(geomId)})");
             }
 
-            int prodShapeId = shapeRepId.HasValue
+            int? prodShapeId = shapeRepId.HasValue
                 ? w.Add("IFCPRODUCTDEFINITIONSHAPE", $"$,$,({StepWriter.Ref(shapeRepId.Value)})")
-                : w.Add("IFCPRODUCTDEFINITIONSHAPE", "$,$,$");
+                : null;
 
             int elemPlacementId = w.Add("IFCLOCALPLACEMENT",
                 $"{StepWriter.Ref(storeyPlacementId)},{StepWriter.Ref(worldPlacement3dId)}");
 
             string ifcType = ClassifyPart(part);
-            string elemGuid = part.Guid != Guid.Empty ? IfcGuid.ToIfcGuid(part.Guid) : IfcGuid.FromElementId(part.Id, "TeklaPart");
+            string elemGuid = part.IfcGuid;
             string elemName = string.IsNullOrEmpty(part.Name) ? $"Part_{part.Id}" : part.Name;
             string elemTag = part.Id.ToString(CultureInfo.InvariantCulture);
 
@@ -165,7 +167,7 @@ internal static class IfcExporter
             {
                 if (!materialCache.TryGetValue(part.Material, out int matId))
                 {
-                    matId = w.Add("IFCMATERIAL", StepWriter.Str(part.Material));
+                    matId = w.Add("IFCMATERIAL", isIfc4 ? $"{StepWriter.Str(part.Material)},$,$" : StepWriter.Str(part.Material));
                     materialCache[part.Material] = matId;
                 }
                 w.Add("IFCRELASSOCIATESMATERIAL",
@@ -175,7 +177,7 @@ internal static class IfcExporter
             // Properties
             if (options.ExportProperties)
             {
-                WritePartProperties(w, partStepId, part, ownerHistoryId);
+                WritePartProperties(w, partStepId, part, ownerHistoryId, scale);
             }
 
             if (!options.ExportAssemblies || part.Assembly == null)
@@ -193,12 +195,12 @@ internal static class IfcExporter
                 int asmPlacementId = w.Add("IFCLOCALPLACEMENT",
                     $"{StepWriter.Ref(storeyPlacementId)},{StepWriter.Ref(worldPlacement3dId)}");
 
-                string asmGuid = asm.Guid != Guid.Empty ? IfcGuid.ToIfcGuid(asm.Guid) : IfcGuid.FromElementId(asm.Id, "TeklaAssembly");
+                string asmGuid = asm.IfcGuid;
                 string asmName = string.IsNullOrEmpty(asm.Name) ? $"Assembly_{asm.Id}" : asm.Name;
                 string asmTag = asm.Id.ToString(CultureInfo.InvariantCulture);
 
                 int asmStepId = w.Add("IFCELEMENTASSEMBLY",
-                    $"{StepWriter.Str(asmGuid)},{StepWriter.Ref(ownerHistoryId)},{StepWriter.Str(asmName)},$,$,{StepWriter.Ref(asmPlacementId)},$,{StepWriter.Str(asmTag)},.NOTDEFINED.");
+                    $"{StepWriter.Str(asmGuid)},{StepWriter.Ref(ownerHistoryId)},{StepWriter.Str(asmName)},$,$,{StepWriter.Ref(asmPlacementId)},$,{StepWriter.Str(asmTag)},.NOTDEFINED.,.NOTDEFINED.");
                 assemblyStepIds.Add(asmStepId);
 
                 // Relate parts to this assembly
@@ -233,11 +235,13 @@ internal static class IfcExporter
                 int boltPlacementId = w.Add("IFCLOCALPLACEMENT",
                     $"{StepWriter.Ref(storeyPlacementId)},{StepWriter.Ref(worldPlacement3dId)}");
 
-                string boltGuid = bolt.Guid != Guid.Empty ? IfcGuid.ToIfcGuid(bolt.Guid) : IfcGuid.FromElementId(bolt.Id, "TeklaBolt");
+                string boltGuid = bolt.IfcGuid;
                 string boltTag = bolt.Id.ToString(CultureInfo.InvariantCulture);
 
                 int boltStepId = w.Add("IFCMECHANICALFASTENER",
-                    $"{StepWriter.Str(boltGuid)},{StepWriter.Ref(ownerHistoryId)},'Bolt Group',$,$,{StepWriter.Ref(boltPlacementId)},$,{StepWriter.Str(boltTag)},$,$");
+                    isIfc4
+                        ? $"{StepWriter.Str(boltGuid)},{StepWriter.Ref(ownerHistoryId)},'Bolt Group',$,$,{StepWriter.Ref(boltPlacementId)},$,{StepWriter.Str(boltTag)},$,$,.BOLT."
+                        : $"{StepWriter.Str(boltGuid)},{StepWriter.Ref(ownerHistoryId)},'Bolt Group',$,$,{StepWriter.Ref(boltPlacementId)},$,{StepWriter.Str(boltTag)},$,$");
                 boltStepIds.Add(boltStepId);
 
                 if (options.ExportProperties)
@@ -256,11 +260,13 @@ internal static class IfcExporter
                 int weldPlacementId = w.Add("IFCLOCALPLACEMENT",
                     $"{StepWriter.Ref(storeyPlacementId)},{StepWriter.Ref(worldPlacement3dId)}");
 
-                string weldGuid = weld.Guid != Guid.Empty ? IfcGuid.ToIfcGuid(weld.Guid) : IfcGuid.FromElementId(weld.Id, "TeklaWeld");
+                string weldGuid = weld.IfcGuid;
                 string weldTag = weld.Id.ToString(CultureInfo.InvariantCulture);
 
                 int weldStepId = w.Add("IFCFASTENER",
-                    $"{StepWriter.Str(weldGuid)},{StepWriter.Ref(ownerHistoryId)},'Weld',$,$,{StepWriter.Ref(weldPlacementId)},$,{StepWriter.Str(weldTag)}");
+                    isIfc4
+                        ? $"{StepWriter.Str(weldGuid)},{StepWriter.Ref(ownerHistoryId)},'Weld',$,$,{StepWriter.Ref(weldPlacementId)},$,{StepWriter.Str(weldTag)},.WELD."
+                        : $"{StepWriter.Str(weldGuid)},{StepWriter.Ref(ownerHistoryId)},'Weld',$,$,{StepWriter.Ref(weldPlacementId)},$,{StepWriter.Str(weldTag)}");
                 weldStepIds.Add(weldStepId);
 
                 if (options.ExportProperties)
@@ -321,20 +327,21 @@ internal static class IfcExporter
         int ownerHistoryId,
         string name,
         int placementId,
-        int shapeId,
+        int? shapeId,
         string tag,
         bool isIfc4)
     {
+        string shapeArg = shapeId.HasValue ? StepWriter.Ref(shapeId.Value) : "$";
         return ifcType switch
         {
             "IFCBEAM" => w.Add("IFCBEAM",
-                $"{StepWriter.Str(guid)},{StepWriter.Ref(ownerHistoryId)},{StepWriter.Str(name)},$,$,{StepWriter.Ref(placementId)},{StepWriter.Ref(shapeId)},{StepWriter.Str(tag)}" + (isIfc4 ? ",.BEAM." : "")),
+                $"{StepWriter.Str(guid)},{StepWriter.Ref(ownerHistoryId)},{StepWriter.Str(name)},$,$,{StepWriter.Ref(placementId)},{shapeArg},{StepWriter.Str(tag)}" + (isIfc4 ? ",.BEAM." : "")),
             "IFCCOLUMN" => w.Add("IFCCOLUMN",
-                $"{StepWriter.Str(guid)},{StepWriter.Ref(ownerHistoryId)},{StepWriter.Str(name)},$,$,{StepWriter.Ref(placementId)},{StepWriter.Ref(shapeId)},{StepWriter.Str(tag)}" + (isIfc4 ? ",.COLUMN." : "")),
+                $"{StepWriter.Str(guid)},{StepWriter.Ref(ownerHistoryId)},{StepWriter.Str(name)},$,$,{StepWriter.Ref(placementId)},{shapeArg},{StepWriter.Str(tag)}" + (isIfc4 ? ",.COLUMN." : "")),
             "IFCPLATE" => w.Add("IFCPLATE",
-                $"{StepWriter.Str(guid)},{StepWriter.Ref(ownerHistoryId)},{StepWriter.Str(name)},$,$,{StepWriter.Ref(placementId)},{StepWriter.Ref(shapeId)},{StepWriter.Str(tag)}" + (isIfc4 ? ",.PLATE." : "")),
+                $"{StepWriter.Str(guid)},{StepWriter.Ref(ownerHistoryId)},{StepWriter.Str(name)},$,$,{StepWriter.Ref(placementId)},{shapeArg},{StepWriter.Str(tag)}" + (isIfc4 ? ",.NOTDEFINED." : "")),
             _ => w.Add("IFCMEMBER",
-                $"{StepWriter.Str(guid)},{StepWriter.Ref(ownerHistoryId)},{StepWriter.Str(name)},$,$,{StepWriter.Ref(placementId)},{StepWriter.Ref(shapeId)},{StepWriter.Str(tag)}" + (isIfc4 ? ",.MEMBER." : "")),
+                $"{StepWriter.Str(guid)},{StepWriter.Ref(ownerHistoryId)},{StepWriter.Str(name)},$,$,{StepWriter.Ref(placementId)},{shapeArg},{StepWriter.Str(tag)}" + (isIfc4 ? ",.MEMBER." : "")),
         };
     }
 
@@ -464,7 +471,7 @@ internal static class IfcExporter
         return w.Add("IFCFACE", StepWriter.List(StepWriter.Ref(boundId)));
     }
 
-    private static void WritePartProperties(StepWriter w, int partStepId, ModelPart part, int ownerHistoryId)
+    private static void WritePartProperties(StepWriter w, int partStepId, ModelPart part, int ownerHistoryId, double scale)
     {
         var props = new List<int>();
 
@@ -483,7 +490,7 @@ internal static class IfcExporter
 
         void AddReal(string name, double val)
         {
-            props.Add(w.Add("IFCPROPERTYSINGLEVALUE", $"{StepWriter.Str(name)},$,IFCREAL({StepWriter.Real(val)}),$"));
+            props.Add(w.Add("IFCPROPERTYSINGLEVALUE", $"{StepWriter.Str(name)},$,IFCREAL({StepWriter.RealExact(val)}),$"));
         }
 
         AddLabel("Tekla_PartMark", $"{part.Prefix}{part.PositionNumber}");
@@ -494,7 +501,7 @@ internal static class IfcExporter
         AddInteger("Tekla_Phase", part.Phase);
         if (part.Length > 0)
         {
-            props.Add(w.Add("IFCPROPERTYSINGLEVALUE", $"'{StepWriter.Escape("Tekla_Length")}',$,IFCLENGTHMEASURE({StepWriter.Real(part.Length)}),$"));
+            props.Add(w.Add("IFCPROPERTYSINGLEVALUE", $"{StepWriter.Str("Tekla_Length")},$,IFCLENGTHMEASURE({StepWriter.RealExact(part.Length * scale)}),$"));
         }
 
         foreach (var (k, v) in part.StringAttributes)
@@ -548,7 +555,7 @@ internal static class IfcExporter
 
         foreach (var (k, v) in asm.NumericAttributes)
         {
-            props.Add(w.Add("IFCPROPERTYSINGLEVALUE", $"{StepWriter.Str($"Tekla_{k}")},$,IFCREAL({StepWriter.Real(v)}),$"));
+            props.Add(w.Add("IFCPROPERTYSINGLEVALUE", $"{StepWriter.Str($"Tekla_{k}")},$,IFCREAL({StepWriter.RealExact(v)}),$"));
         }
 
         if (props.Count > 0)

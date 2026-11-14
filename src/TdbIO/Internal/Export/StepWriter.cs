@@ -86,8 +86,17 @@ internal sealed class StepWriter
 
     public static string RealExact(double v)
     {
-        string text = v.ToString("G15", CultureInfo.InvariantCulture);
-        if (!text.Contains('.') && !text.Contains('E') && !text.Contains('e'))
+        string text = v.ToString("G17", CultureInfo.InvariantCulture);
+        int expIdx = text.IndexOfAny(['e', 'E']);
+        if (expIdx >= 0)
+        {
+            string mantissa = text[..expIdx];
+            if (!mantissa.Contains('.'))
+            {
+                text = string.Concat(mantissa, ".", text.AsSpan(expIdx));
+            }
+        }
+        else if (!text.Contains('.'))
         {
             text += ".";
         }
