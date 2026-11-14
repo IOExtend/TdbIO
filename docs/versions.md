@@ -107,18 +107,26 @@ The internal database engine (LumoDB / DBvirtual) layout is fully consistent fro
   - Trailing integers: Two signed 32-bit little-endian integers (`i32`, 4 bytes each) recording the creation transaction and deletion/superseding transaction IDs. On disk, each row occupies exactly `1 + RowSize + 4 + 4 = RowSize + 9` bytes. Note: While stored as 32-bit integers on disk, the public API exposes these values as 64-bit `long` properties (`CreationTimeId`, `DeletionTimeId`) for range safety and API consistency.
   - Row terminator: `0x00` byte after the last row of the section.
 - **Key schema table IDs:**
-  - Table 1: `object`
-  - Table 2: `assembly`
-  - Table 3: `coordsys`
-  - Table 13: `point`
-  - Table 14: `weld`
-  - Table 36: `part`
-  - Table 44: `part_attr`
-  - Table 48: `num_attr_attr`
-  - Table 49: `str_attr_attr`
-  - Table 50: `string_pool`
-  - Table 107: `bolt`
-  - Table 140: `bolt_hole`
-  - Table 141: `object_phase`
+  - Table 1: `object` (`ObjectRow`, size 72)
+  - Table 2: `assembly` (`AssemblyRow`, size 92)
+  - Table 3: `coordsys` (`CoordsysRow`, size 40)
+  - Table 10: `part` (`PartRow`, size 64)
+  - Table 13: `point` (`PointRow`, size 32)
+  - Table 16: `relation` (`RelationRow`, size 60)
+  - Table 20: `weld` (`WeldingRow`, size 24)
+  - Table 38: `num_attr` (`NumAttrRow`, size 24)
+  - Table 39: `str_attr` (`StrAttrRow`, size 24)
+  - Table 44: `part_attr` (`PartAttrRow`, size 372)
+  - Table 48: `num_attr_attr` (`NumAttrAttrRow`, size 44)
+  - Table 49: `str_attr_attr` (`StrAttrAttrRow`, size 120)
+  - Table 50: `string_pool` (`StringPoolRow`, size 45)
+  - Table 94: `part_numbering` (`PartNumberingRow`, size 68)
+  - Table 95: `assembly_numbering` (`AssemblyNumberingRow`, size 76)
+  - Table 105: `object_numbering` (`ObjectNumberingRow`, size 12)
+  - Table 107: `bolt` (`BoltRow`, size 24)
+  - Table 132: `object_modification` (`ObjectModificationRow`, size 20)
+  - Table 140: `bolt_hole` (`BoltHoleRow`, size 48)
+  - Table 141: `object_phase` (`ObjectPhaseRow`, size 8)
+  - Table 142: `bolt_hole_points` (`BoltHolePointsRow`, size 60)
 
 All table sections across all versions walk continuously from the first section to the final byte of the uncompressed file.
