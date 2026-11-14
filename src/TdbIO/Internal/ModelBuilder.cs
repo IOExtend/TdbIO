@@ -1,7 +1,11 @@
+using System.Text;
+
 namespace TdbIO.Internal;
 
 internal static class ModelBuilder
 {
+    private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+
     public static TeklaModel Build(Db1Document doc)
     {
         ArgumentNullException.ThrowIfNull(doc);
@@ -13,32 +17,90 @@ internal static class ModelBuilder
         ArgumentNullException.ThrowIfNull(doc);
         ArgumentNullException.ThrowIfNull(sections);
 
-        // 1. Decoded row collections
-        var objRows = FindSection(sections, ObjectRow.TableKey, ObjectRow.ExpectedRowSize)?.AsObjects() ?? Array.Empty<ObjectRow>();
-        var assRows = FindSection(sections, AssemblyRow.TableKey, AssemblyRow.ExpectedRowSize)?.AsAssemblies() ?? Array.Empty<AssemblyRow>();
-        var partRows = FindSection(sections, PartRow.TableKey, PartRow.ExpectedRowSize)?.AsParts() ?? Array.Empty<PartRow>();
-        var boltRows = FindSection(sections, BoltRow.TableKey, BoltRow.ExpectedRowSize)?.AsBolts() ?? Array.Empty<BoltRow>();
-        var weldRows = FindSection(sections, WeldingRow.TableKey, WeldingRow.ExpectedRowSize)?.AsWeldings() ?? Array.Empty<WeldingRow>();
-        var ptRows = FindSection(sections, PointRow.TableKey, PointRow.ExpectedRowSize)?.AsPoints() ?? Array.Empty<PointRow>();
-        var csysRows = FindSection(sections, CoordsysRow.TableKey, CoordsysRow.ExpectedRowSize)?.AsCoordsys() ?? Array.Empty<CoordsysRow>();
-        var paRows = FindSection(sections, PartAttrRow.TableKey, PartAttrRow.ExpectedRowSize)?.AsPartAttrs() ?? Array.Empty<PartAttrRow>();
-        var strPoolRows = FindSection(sections, StringPoolRow.TableKey, StringPoolRow.ExpectedRowSize)?.AsStringPool() ?? Array.Empty<StringPoolRow>();
-        var numAttrRows = FindSection(sections, NumAttrRow.TableKey, NumAttrRow.ExpectedRowSize)?.AsNumAttrs() ?? Array.Empty<NumAttrRow>();
-        var strAttrRows = FindSection(sections, StrAttrRow.TableKey, StrAttrRow.ExpectedRowSize)?.AsStrAttrs() ?? Array.Empty<StrAttrRow>();
-        var numDefRows = FindSection(sections, NumAttrAttrRow.TableKey, NumAttrAttrRow.ExpectedRowSize)?.AsNumAttrAttrs() ?? Array.Empty<NumAttrAttrRow>();
-        var strDefRows = FindSection(sections, StrAttrAttrRow.TableKey, StrAttrAttrRow.ExpectedRowSize)?.AsStrAttrAttrs() ?? Array.Empty<StrAttrAttrRow>();
-        var phaseRows = FindSection(sections, ObjectPhaseRow.TableKey, ObjectPhaseRow.ExpectedRowSize)?.AsObjectPhases() ?? Array.Empty<ObjectPhaseRow>();
-        var partNumRows = FindSection(sections, PartNumberingRow.TableKey, PartNumberingRow.ExpectedRowSize)?.AsPartNumberings() ?? Array.Empty<PartNumberingRow>();
-        var assNumRows = FindSection(sections, AssemblyNumberingRow.TableKey, AssemblyNumberingRow.ExpectedRowSize)?.AsAssemblyNumberings() ?? Array.Empty<AssemblyNumberingRow>();
-        var holeRows = FindSection(sections, BoltHoleRow.TableKey, BoltHoleRow.ExpectedRowSize)?.AsBoltHoles() ?? Array.Empty<BoltHoleRow>();
-        var boltPtRows = FindSection(sections, BoltHolePointsRow.TableKey, BoltHolePointsRow.ExpectedRowSize)?.AsBoltHolePoints() ?? Array.Empty<BoltHolePointsRow>();
+        // 1. Decoded active row collections (Marker == 0x0C excluded)
+        var objRows = GetActiveRows(FindSection(sections, ObjectRow.TableKey, ObjectRow.ExpectedRowSize), ObjectRow.ExpectedRowSize, r => r.AsObject());
+        var assRows = GetActiveRows(FindSection(sections, AssemblyRow.TableKey, AssemblyRow.ExpectedRowSize), AssemblyRow.ExpectedRowSize, r => r.AsAssembly());
+        var partRows = GetActiveRows(FindSection(sections, PartRow.TableKey, PartRow.ExpectedRowSize), PartRow.ExpectedRowSize, r => r.AsPart());
+        var boltRows = GetActiveRows(FindSection(sections, BoltRow.TableKey, BoltRow.ExpectedRowSize), BoltRow.ExpectedRowSize, r => r.AsBolt());
+        var weldRows = GetActiveRows(FindSection(sections, WeldingRow.TableKey, WeldingRow.ExpectedRowSize), WeldingRow.ExpectedRowSize, r => r.AsWelding());
+        var ptRows = GetActiveRows(FindSection(sections, PointRow.TableKey, PointRow.ExpectedRowSize), PointRow.ExpectedRowSize, r => r.AsPoint());
+        var csysRows = GetActiveRows(FindSection(sections, CoordsysRow.TableKey, CoordsysRow.ExpectedRowSize), CoordsysRow.ExpectedRowSize, r => r.AsCoordsys());
+        var paRows = GetActiveRows(FindSection(sections, PartAttrRow.TableKey, PartAttrRow.ExpectedRowSize), PartAttrRow.ExpectedRowSize, r => r.AsPartAttr());
+        var strPoolRows = GetActiveRows(FindSection(sections, StringPoolRow.TableKey, StringPoolRow.ExpectedRowSize), StringPoolRow.ExpectedRowSize, r => r.AsStringPool());
+        var numAttrRows = GetActiveRows(FindSection(sections, NumAttrRow.TableKey, NumAttrRow.ExpectedRowSize), NumAttrRow.ExpectedRowSize, r => r.AsNumAttr());
+        var strAttrRows = GetActiveRows(FindSection(sections, StrAttrRow.TableKey, StrAttrRow.ExpectedRowSize), StrAttrRow.ExpectedRowSize, r => r.AsStrAttr());
+        var numDefRows = GetActiveRows(FindSection(sections, NumAttrAttrRow.TableKey, NumAttrAttrRow.ExpectedRowSize), NumAttrAttrRow.ExpectedRowSize, r => r.AsNumAttrAttr());
+        var strDefRows = GetActiveRows(FindSection(sections, StrAttrAttrRow.TableKey, StrAttrAttrRow.ExpectedRowSize), StrAttrAttrRow.ExpectedRowSize, r => r.AsStrAttrAttr());
+        var phaseRows = GetActiveRows(FindSection(sections, ObjectPhaseRow.TableKey, ObjectPhaseRow.ExpectedRowSize), ObjectPhaseRow.ExpectedRowSize, r => r.AsObjectPhase());
+        var partNumRows = GetActiveRows(FindSection(sections, PartNumberingRow.TableKey, PartNumberingRow.ExpectedRowSize), PartNumberingRow.ExpectedRowSize, r => r.AsPartNumbering());
+        var assNumRows = GetActiveRows(FindSection(sections, AssemblyNumberingRow.TableKey, AssemblyNumberingRow.ExpectedRowSize), AssemblyNumberingRow.ExpectedRowSize, r => r.AsAssemblyNumbering());
+        var objNumRows = GetActiveRows(FindSection(sections, ObjectNumberingRow.TableKey, ObjectNumberingRow.ExpectedRowSize), ObjectNumberingRow.ExpectedRowSize, r => r.AsObjectNumbering());
+        var holeRows = GetActiveRows(FindSection(sections, BoltHoleRow.TableKey, BoltHoleRow.ExpectedRowSize), BoltHoleRow.ExpectedRowSize, r => r.AsBoltHole());
+        var boltPtRows = GetActiveRows(FindSection(sections, BoltHolePointsRow.TableKey, BoltHolePointsRow.ExpectedRowSize), BoltHolePointsRow.ExpectedRowSize, r => r.AsBoltHolePoints());
 
         // 2. Primary lookups
         var objects = new Dictionary<int, ObjectRow>(objRows.Count);
         foreach (var o in objRows) objects[o.Id] = o;
 
+        // Follow string-pool NextId chain with cycle and missing-link detection
+        var chunksById = new Dictionary<int, StringPoolRow>(strPoolRows.Count);
+        foreach (var sp in strPoolRows)
+            chunksById[sp.Id] = sp;
+
         var stringPool = new Dictionary<int, string>(strPoolRows.Count);
-        foreach (var sp in strPoolRows) stringPool[sp.Id] = sp.Text;
+        var rawBuffer = new List<byte>(128);
+        var visited = new HashSet<int>();
+        var childChunkIds = new HashSet<int>();
+        foreach (var sp in strPoolRows)
+            if (sp.NextId > 0) childChunkIds.Add(sp.NextId);
+
+        var allVisitedInAnyChain = new HashSet<int>();
+
+        foreach (var head in strPoolRows)
+        {
+            if (childChunkIds.Contains(head.Id) && allVisitedInAnyChain.Contains(head.Id))
+                continue;
+
+            if (stringPool.ContainsKey(head.Id))
+                continue;
+
+            rawBuffer.Clear();
+            visited.Clear();
+
+            int currId = head.Id;
+            while (currId > 0)
+            {
+                if (!visited.Add(currId))
+                    throw FormatError.At($"Cycle detected in string pool chain at id {currId}", 0);
+
+                allVisitedInAnyChain.Add(currId);
+
+                if (!chunksById.TryGetValue(currId, out var chunk))
+                    throw FormatError.At($"Missing string pool chunk link {currId}", 0);
+
+                ReadOnlySpan<byte> chunkBytes = chunk.RawBytes.Span;
+                if (chunkBytes.IsEmpty && !string.IsNullOrEmpty(chunk.Text))
+                {
+                    rawBuffer.AddRange(Encoding.UTF8.GetBytes(chunk.Text));
+                }
+                else if (!chunkBytes.IsEmpty)
+                {
+                    int nul = chunkBytes.IndexOf((byte)0);
+                    rawBuffer.AddRange(nul >= 0 ? chunkBytes[..nul] : chunkBytes);
+                }
+
+                currId = chunk.NextId;
+            }
+
+            try
+            {
+                stringPool[head.Id] = StrictUtf8.GetString(rawBuffer.ToArray());
+            }
+            catch (DecoderFallbackException e)
+            {
+                throw FormatError.At("Invalid UTF-8 sequence in string pool chain", 0, e);
+            }
+        }
 
         var points = new Dictionary<int, ModelPoint>(ptRows.Count);
         foreach (var pt in ptRows) points[pt.Id] = new ModelPoint(pt.Id, pt.X, pt.Y, pt.Z);
@@ -57,6 +119,9 @@ internal static class ModelBuilder
 
         var assNumbering = new Dictionary<int, AssemblyNumberingRow>(assNumRows.Count);
         foreach (var an in assNumRows) assNumbering[an.Id] = an;
+
+        var objNumberIds = new Dictionary<int, int>(objNumRows.Count);
+        foreach (var on in objNumRows) objNumberIds[on.Id] = on.NumberId;
 
         // 3. User & System Attributes
         var numDefs = new Dictionary<int, (string Name, double Value)>(numDefRows.Count);
@@ -103,7 +168,8 @@ internal static class ModelBuilder
         {
             var obj = objects.GetValueOrDefault(a.Id);
             int phase = phases.GetValueOrDefault(a.Id);
-            assNumbering.TryGetValue(a.Id, out var an);
+            int anId = objNumberIds.TryGetValue(a.Id, out int mappedAnId) ? mappedAnId : a.Id;
+            assNumbering.TryGetValue(anId, out var an);
             var numAttrs = numAttrsByObj.GetValueOrDefault(a.Id);
             var strAttrs = strAttrsByObj.GetValueOrDefault(a.Id);
 
@@ -135,7 +201,8 @@ internal static class ModelBuilder
             var obj = objects.GetValueOrDefault(p.Id);
             int phase = phases.GetValueOrDefault(p.Id);
             partAttrs.TryGetValue(p.PartAttrId, out var pa);
-            partNumbering.TryGetValue(p.Id, out var pn);
+            int pnId = objNumberIds.TryGetValue(p.Id, out int mappedPnId) ? mappedPnId : p.Id;
+            partNumbering.TryGetValue(pnId, out var pn);
 
             string name = pa.Name ?? string.Empty;
             string rawProf = pa.Profile ?? string.Empty;
@@ -301,8 +368,6 @@ internal static class ModelBuilder
                 ModelPart? main = null;
                 if (assRow.MainPartId > 0)
                     main = partsById.GetValueOrDefault(assRow.MainPartId);
-                if (main == null && assParts.Count > 0)
-                    main = assParts[0];
                 ass.MainPart = main;
 
                 var secondaries = new List<ModelPart>(assParts.Count);
@@ -349,6 +414,42 @@ internal static class ModelBuilder
         foreach (var ass in assemblies)
             ass.Bolts = boltsByAssembly.GetValueOrDefault(ass.Id) ?? (IReadOnlyList<ModelBolt>)Array.Empty<ModelBolt>();
 
+        // Generic objects (Table 1 rows that are not assembly, part, bolt, or weld)
+        var genericObjectsById = new Dictionary<int, ModelObject>();
+        foreach (var o in objRows)
+        {
+            if (!assembliesById.ContainsKey(o.Id) &&
+                !partsById.ContainsKey(o.Id) &&
+                !boltsById.ContainsKey(o.Id) &&
+                !weldsById.ContainsKey(o.Id))
+            {
+                int phase = phases.GetValueOrDefault(o.Id);
+                var numAttrs = numAttrsByObj.GetValueOrDefault(o.Id);
+                var strAttrs = strAttrsByObj.GetValueOrDefault(o.Id);
+                var genObj = new ModelObject(
+                    o.Id,
+                    o.Guid,
+                    o.Type,
+                    o.Subtype,
+                    phase,
+                    o.ParentId > 0 ? o.ParentId : null,
+                    o.AssemblyId > 0 ? o.AssemblyId : null,
+                    strAttrs,
+                    numAttrs);
+                genericObjectsById[o.Id] = genObj;
+            }
+        }
+
+        ModelObject? FindObject(int id)
+        {
+            if (assembliesById.TryGetValue(id, out var a)) return a;
+            if (partsById.TryGetValue(id, out var p)) return p;
+            if (boltsById.TryGetValue(id, out var b)) return b;
+            if (weldsById.TryGetValue(id, out var w)) return w;
+            if (genericObjectsById.TryGetValue(id, out var g)) return g;
+            return null;
+        }
+
         // Link welds
         var weldsByPart = new Dictionary<int, List<ModelWeld>>();
         var weldsByAssembly = new Dictionary<int, List<ModelWeld>>();
@@ -362,18 +463,22 @@ internal static class ModelBuilder
                 assWelds.Add(weld);
             }
 
-            // Welds often attach via parent component
+            // Resolve weld parent from complete object index (including generic connections/components)
             if (weld.ParentId.HasValue)
             {
-                if (assembliesById.TryGetValue(weld.ParentId.Value, out var parentAss))
+                var parent = FindObject(weld.ParentId.Value);
+                if (parent != null)
                 {
-                    weld.Parent = parentAss;
-                    weld.Assembly ??= parentAss;
-                }
-                else if (partsById.TryGetValue(weld.ParentId.Value, out var parentPart))
-                {
-                    weld.Parent = parentPart;
-                    weld.Assembly ??= parentPart.Assembly;
+                    weld.Parent = parent;
+                    if (weld.Assembly == null)
+                    {
+                        if (parent is ModelAssembly parentAss)
+                            weld.Assembly = parentAss;
+                        else if (parent is ModelPart parentPart)
+                            weld.Assembly = parentPart.Assembly;
+                        else if (parent.AssemblyId.HasValue && assembliesById.TryGetValue(parent.AssemblyId.Value, out var objAss))
+                            weld.Assembly = objAss;
+                    }
                 }
             }
 
@@ -393,48 +498,28 @@ internal static class ModelBuilder
             ass.Welds = weldsByAssembly.GetValueOrDefault(ass.Id) ?? (IReadOnlyList<ModelWeld>)Array.Empty<ModelWeld>();
 
         // 9. All objects list
-        var allObjects = new List<ModelObject>(objects.Count > 0 ? objects.Count : assemblies.Count + parts.Count + bolts.Count + welds.Count);
-        var seenIds = new HashSet<int>();
-
-        foreach (var a in assemblies)
-        {
-            allObjects.Add(a);
-            seenIds.Add(a.Id);
-        }
-        foreach (var p in parts)
-        {
-            if (seenIds.Add(p.Id)) allObjects.Add(p);
-        }
-        foreach (var b in bolts)
-        {
-            if (seenIds.Add(b.Id)) allObjects.Add(b);
-        }
-        foreach (var w in welds)
-        {
-            if (seenIds.Add(w.Id)) allObjects.Add(w);
-        }
-
-        foreach (var o in objRows)
-        {
-            if (seenIds.Add(o.Id))
-            {
-                int phase = phases.GetValueOrDefault(o.Id);
-                var numAttrs = numAttrsByObj.GetValueOrDefault(o.Id);
-                var strAttrs = strAttrsByObj.GetValueOrDefault(o.Id);
-                allObjects.Add(new ModelObject(
-                    o.Id,
-                    o.Guid,
-                    o.Type,
-                    o.Subtype,
-                    phase,
-                    o.ParentId > 0 ? o.ParentId : null,
-                    o.AssemblyId > 0 ? o.AssemblyId : null,
-                    strAttrs,
-                    numAttrs));
-            }
-        }
+        var allObjects = new List<ModelObject>(assemblies.Count + parts.Count + bolts.Count + welds.Count + genericObjectsById.Count);
+        allObjects.AddRange(assemblies);
+        allObjects.AddRange(parts);
+        allObjects.AddRange(bolts);
+        allObjects.AddRange(welds);
+        allObjects.AddRange(genericObjectsById.Values);
 
         return new TeklaModel(doc, doc.ModelGuid, assemblies, parts, bolts, welds, allObjects);
+    }
+
+    private static List<T> GetActiveRows<T>(TableSection? section, int expectedSize, Func<TableRow, T> decode)
+    {
+        if (section == null || section.RowSize != expectedSize)
+            return [];
+        var list = new List<T>(section.Rows.Count);
+        for (int i = 0; i < section.Rows.Count; i++)
+        {
+            var row = section.Rows[i];
+            if (row.Marker == 0x0C) continue;
+            list.Add(decode(row));
+        }
+        return list;
     }
 
     private static TableSection? FindSection(IReadOnlyList<TableSection> sections, int key, int rowSize)

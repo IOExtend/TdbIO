@@ -16,6 +16,13 @@ public class ObjectModelTests
         return new TableRow(100, 4, bytes, 1, 2);
     }
 
+    private static TableRow MakeRowWithMarker(int size, byte marker, FillSpan fill)
+    {
+        var bytes = new byte[size];
+        fill(bytes);
+        return new TableRow(100, marker, bytes, 1, 2);
+    }
+
     private static TableSection MakeSection(int rowSize, int? key, params TableRow[] rows) =>
         new(0, 0, 100, key, rowSize, [0, 0, 0], 20, rows);
 
@@ -493,5 +500,310 @@ public class ObjectModelTests
                 Assert.Same(w, model.FindObject(w.Id));
             }
         }
+    }
+
+    [Fact]
+    public void DeletedRowsAreExcludedFromModelWhileRetainedInLowLevelApi()
+    {
+        var activeGuid = Guid.NewGuid();
+        var deletedGuid = Guid.NewGuid();
+
+        // Row 1: Active object (Id = 1, Marker = 0x04)
+        var activeRow = MakeRowWithMarker(ObjectRow.ExpectedRowSize, 0x04, span =>
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(span[0..], 1);
+            activeGuid.TryWriteBytes(span[12..], bigEndian: true, out _);
+            BinaryPrimitives.WriteInt32LittleEndian(span[28..], 1); // Part
+        });
+
+        // Row 2: Deleted object (Id = 2, Marker = 0x0C)
+        var deletedRow = MakeRowWithMarker(ObjectRow.ExpectedRowSize, 0x0C, span =>
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(span[0..], 2);
+            deletedGuid.TryWriteBytes(span[12..], bigEndian: true, out _);
+            BinaryPrimitives.WriteInt32LittleEndian(span[28..], 1); // Part
+        });
+
+        // Row 3: Superseded/deleted version of Id = 1 (Marker = 0x0C)
+        var oldRow = MakeRowWithMarker(ObjectRow.ExpectedRowSize, 0x0C, span =>
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(span[0..], 1);
+            Guid.NewGuid().TryWriteBytes(span[12..], bigEndian: true, out _);
+            BinaryPrimitives.WriteInt32LittleEndian(span[28..], 99);
+        });
+
+        var section = MakeSection(ObjectRow.ExpectedRowSize, ObjectRow.TableKey, oldRow, activeRow, deletedRow);
+
+        // Low-level API retains all 3 rows
+        var allDecoded = section.AsObjects();
+        Assert.Equal(3, allDecoded.Count);
+
+        // High-level ModelBuilder only includes active rows
+        var doc = Db1Document.Create(Synthetic.Db1Payload([]));
+        var model = ModelBuilder.BuildFromSections(doc, [section]);
+
+        Assert.Single(model.Objects);
+        var obj = model.Objects[0];
+        Assert.Equal(1, obj.Id);
+        Assert.Equal(activeGuid, obj.Guid);
+        Assert.Equal(1, obj.Type);
+        Assert.Null(model.FindObject(2));
+    }
+
+    [Fact]
+    public void StringPoolFollowsChainsAndReconstructsMultiByteUtf8AcrossChunks()
+    {
+        // Chunk 1: 28 ASCII bytes + 0xD0 (first byte of 2-byte UTF-8 Cyrillic character 'Д')
+        var chunk1Bytes = new byte[29];
+        for (int i = 0; i < 28; i++) chunk1Bytes[i] = (byte)('A' + (i % 26));
+        chunk1Bytes[28] = 0xD0;
+
+        var spRow1 = MakeRow(StringPoolRow.ExpectedRowSize, span =>
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(span[0..], 1);  // Id = 1
+            BinaryPrimitives.WriteInt32LittleEndian(span[4..], 2);  // NextId = 2
+            chunk1Bytes.CopyTo(span[16..]);
+        });
+
+        // Chunk 2: 0x94 (second byte of 'Д') + "оска\0"
+        var chunk2Bytes = new byte[29];
+        chunk2Bytes[0] = 0x94;
+        Encoding.UTF8.GetBytes("оска\0").CopyTo(chunk2Bytes.AsSpan(1));
+
+        var spRow2 = MakeRow(StringPoolRow.ExpectedRowSize, span =>
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(span[0..], 2);  // Id = 2
+            BinaryPrimitives.WriteInt32LittleEndian(span[4..], -1); // NextId = -1 (terminating)
+            chunk2Bytes.CopyTo(span[16..]);
+        });
+
+        var spSec = MakeSection(StringPoolRow.ExpectedRowSize, StringPoolRow.TableKey, spRow1, spRow2);
+
+        // StrAttrAttr row referencing string pool chunk 1
+        var strDefRow = MakeRow(StrAttrAttrRow.ExpectedRowSize, span =>
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(span[0..], 10);
+            Encoding.UTF8.GetBytes("ATTR_NAME\0").CopyTo(span[8..]);
+            BinaryPrimitives.WriteInt32LittleEndian(span[112..], 1); // ValueId = 1
+        });
+        var strDefSec = MakeSection(StrAttrAttrRow.ExpectedRowSize, StrAttrAttrRow.TableKey, strDefRow);
+
+        var strAttrRow = MakeRow(StrAttrRow.ExpectedRowSize, span =>
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(span[0..], 1);
+            BinaryPrimitives.WriteInt32LittleEndian(span[4..], 10); // AttrId = 10
+            BinaryPrimitives.WriteInt32LittleEndian(span[8..], 100); // FatherId = 100
+        });
+        var strAttrSec = MakeSection(StrAttrRow.ExpectedRowSize, StrAttrRow.TableKey, strAttrRow);
+
+        var objRow = MakeRow(ObjectRow.ExpectedRowSize, span =>
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(span[0..], 100);
+        });
+        var objSec = MakeSection(ObjectRow.ExpectedRowSize, ObjectRow.TableKey, objRow);
+
+        var doc = Db1Document.Create(Synthetic.Db1Payload([]));
+        var model = ModelBuilder.BuildFromSections(doc, [objSec, spSec, strDefSec, strAttrSec]);
+
+        var obj = model.FindObject(100);
+        Assert.NotNull(obj);
+        Assert.NotNull(obj.StringAttributes);
+        string expectedPrefix = new string([.. chunk1Bytes[..28].Select(b => (char)b)]);
+        Assert.Equal(expectedPrefix + "Доска", obj.StringAttributes["ATTR_NAME"]);
+    }
+
+    [Fact]
+    public void StringPoolCycleThrowsInvalidDataException()
+    {
+        var spRow1 = MakeRow(StringPoolRow.ExpectedRowSize, span =>
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(span[0..], 1);
+            BinaryPrimitives.WriteInt32LittleEndian(span[4..], 2); // NextId = 2
+        });
+        var spRow2 = MakeRow(StringPoolRow.ExpectedRowSize, span =>
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(span[0..], 2);
+            BinaryPrimitives.WriteInt32LittleEndian(span[4..], 1); // NextId = 1 (cycle)
+        });
+        var spSec = MakeSection(StringPoolRow.ExpectedRowSize, StringPoolRow.TableKey, spRow1, spRow2);
+
+        var doc = Db1Document.Create(Synthetic.Db1Payload([]));
+        Assert.Throws<InvalidDataException>(() => ModelBuilder.BuildFromSections(doc, [spSec]));
+    }
+
+    [Fact]
+    public void StringPoolMissingLinkThrowsInvalidDataException()
+    {
+        var spRow1 = MakeRow(StringPoolRow.ExpectedRowSize, span =>
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(span[0..], 1);
+            BinaryPrimitives.WriteInt32LittleEndian(span[4..], 999); // NextId = 999 (missing)
+        });
+        var spSec = MakeSection(StringPoolRow.ExpectedRowSize, StringPoolRow.TableKey, spRow1);
+
+        var doc = Db1Document.Create(Synthetic.Db1Payload([]));
+        Assert.Throws<InvalidDataException>(() => ModelBuilder.BuildFromSections(doc, [spSec]));
+    }
+
+    [Fact]
+    public void ObjectNumberingRowMapsObjectIdToNumberId()
+    {
+        // ObjectRow for Part (Id = 200)
+        var objRow = MakeRow(ObjectRow.ExpectedRowSize, span =>
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(span[0..], 200);
+            BinaryPrimitives.WriteInt32LittleEndian(span[28..], 1); // Part
+        });
+        var objSec = MakeSection(ObjectRow.ExpectedRowSize, ObjectRow.TableKey, objRow);
+
+        var partRow = MakeRow(PartRow.ExpectedRowSize, span =>
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(span[0..], 200);
+            BinaryPrimitives.WriteInt32LittleEndian(span[20..], 20); // PartAttrId = 20
+        });
+        var partSec = MakeSection(PartRow.ExpectedRowSize, PartRow.TableKey, partRow);
+
+        var paRow = MakeRow(PartAttrRow.ExpectedRowSize, span =>
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(span[0..], 20);
+            Encoding.UTF8.GetBytes("BEAM\0").CopyTo(span[32..]);
+        });
+        var paSec = MakeSection(PartAttrRow.ExpectedRowSize, PartAttrRow.TableKey, paRow);
+
+        // Table 105: ObjectNumberingRow maps Object Id 200 -> NumberId 777
+        var objNumRow = MakeRow(ObjectNumberingRow.ExpectedRowSize, span =>
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(span[0..], 200); // Id = 200
+            BinaryPrimitives.WriteInt32LittleEndian(span[4..], 777); // NumberId = 777
+        });
+        var objNumSec = MakeSection(ObjectNumberingRow.ExpectedRowSize, ObjectNumberingRow.TableKey, objNumRow);
+
+        // Table 94: PartNumberingRow with Id = 777
+        var partNumRow = MakeRow(PartNumberingRow.ExpectedRowSize, span =>
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(span[0..], 777); // Id = 777
+            BinaryPrimitives.WriteInt32LittleEndian(span[8..], 50);  // StartNumber = 50
+            BinaryPrimitives.WriteInt32LittleEndian(span[12..], 12); // FPos = 12
+            Encoding.UTF8.GetBytes("BM/\0").CopyTo(span[20..]);     // Prefix = BM/
+        });
+        var partNumSec = MakeSection(PartNumberingRow.ExpectedRowSize, PartNumberingRow.TableKey, partNumRow);
+
+        var doc = Db1Document.Create(Synthetic.Db1Payload([]));
+        var model = ModelBuilder.BuildFromSections(doc, [objSec, partSec, paSec, objNumSec, partNumSec]);
+
+        Assert.Single(model.Parts);
+        var part = model.Parts[0];
+        Assert.Equal(200, part.Id);
+        Assert.Equal("BM/", part.Prefix);
+        Assert.Equal(50, part.StartNumber);
+        Assert.Equal(12, part.PositionNumber);
+    }
+
+    [Fact]
+    public void WeldParentResolvesFromGenericComponent()
+    {
+        var assGuid = Guid.NewGuid();
+        var compGuid = Guid.NewGuid();
+        var weldGuid = Guid.NewGuid();
+
+        // Assembly (Id = 100)
+        var objAss = MakeRow(ObjectRow.ExpectedRowSize, span =>
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(span[0..], 100);
+            assGuid.TryWriteBytes(span[12..], bigEndian: true, out _);
+            BinaryPrimitives.WriteInt32LittleEndian(span[28..], 2); // Assembly
+        });
+        var assRow = MakeRow(AssemblyRow.ExpectedRowSize, span =>
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(span[0..], 100);
+        });
+        var assSec = MakeSection(AssemblyRow.ExpectedRowSize, AssemblyRow.TableKey, assRow);
+
+        // Generic Component/Connection (Id = 300, Type = 3, AssemblyId = 100)
+        var objComp = MakeRow(ObjectRow.ExpectedRowSize, span =>
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(span[0..], 300);
+            BinaryPrimitives.WriteInt32LittleEndian(span[8..], 100); // AssemblyId = 100
+            compGuid.TryWriteBytes(span[12..], bigEndian: true, out _);
+            BinaryPrimitives.WriteInt32LittleEndian(span[28..], 3); // Type = 3 (Component/Connection)
+        });
+
+        // Weld (Id = 400, ParentId = 300)
+        var objWeld = MakeRow(ObjectRow.ExpectedRowSize, span =>
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(span[0..], 400);
+            BinaryPrimitives.WriteInt32LittleEndian(span[4..], 300); // ParentId = 300
+            weldGuid.TryWriteBytes(span[12..], bigEndian: true, out _);
+            BinaryPrimitives.WriteInt32LittleEndian(span[28..], 13); // Weld
+        });
+        var objSec = MakeSection(ObjectRow.ExpectedRowSize, ObjectRow.TableKey, objAss, objComp, objWeld);
+
+        var weldRow = MakeRow(WeldingRow.ExpectedRowSize, span =>
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(span[0..], 400);
+            BinaryPrimitives.WriteInt32LittleEndian(span[4..], 55);
+        });
+        var weldSec = MakeSection(WeldingRow.ExpectedRowSize, WeldingRow.TableKey, weldRow);
+
+        var doc = Db1Document.Create(Synthetic.Db1Payload([]));
+        var model = ModelBuilder.BuildFromSections(doc, [objSec, assSec, weldSec]);
+
+        Assert.Single(model.Welds);
+        var weld = model.Welds[0];
+        Assert.Equal(400, weld.Id);
+        Assert.NotNull(weld.Parent);
+        Assert.Equal(300, weld.Parent.Id);
+        Assert.Equal(compGuid, weld.Parent.Guid);
+        Assert.NotNull(weld.Assembly);
+        Assert.Equal(100, weld.Assembly.Id);
+    }
+
+    [Fact]
+    public void AssemblyWithUnresolvedMainPartLeavesMainPartNull()
+    {
+        var assGuid = Guid.NewGuid();
+        var partGuid = Guid.NewGuid();
+
+        var objAss = MakeRow(ObjectRow.ExpectedRowSize, span =>
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(span[0..], 100);
+            assGuid.TryWriteBytes(span[12..], bigEndian: true, out _);
+            BinaryPrimitives.WriteInt32LittleEndian(span[28..], 2);
+        });
+
+        // Assembly points to MainPartId = 999 which does NOT exist
+        var assRow = MakeRow(AssemblyRow.ExpectedRowSize, span =>
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(span[0..], 100);
+            BinaryPrimitives.WriteInt32LittleEndian(span[12..], 999); // MainPartId = 999 (missing)
+            Encoding.UTF8.GetBytes("GIRDER\0").CopyTo(span[20..]);
+        });
+        var assSec = MakeSection(AssemblyRow.ExpectedRowSize, AssemblyRow.TableKey, assRow);
+
+        // Child part in this assembly (Id = 101)
+        var objPart = MakeRow(ObjectRow.ExpectedRowSize, span =>
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(span[0..], 101);
+            BinaryPrimitives.WriteInt32LittleEndian(span[8..], 100); // AssemblyId = 100
+            partGuid.TryWriteBytes(span[12..], bigEndian: true, out _);
+            BinaryPrimitives.WriteInt32LittleEndian(span[28..], 1);
+        });
+        var objSec = MakeSection(ObjectRow.ExpectedRowSize, ObjectRow.TableKey, objAss, objPart);
+
+        var partRow = MakeRow(PartRow.ExpectedRowSize, span =>
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(span[0..], 101);
+        });
+        var partSec = MakeSection(PartRow.ExpectedRowSize, PartRow.TableKey, partRow);
+
+        var doc = Db1Document.Create(Synthetic.Db1Payload([]));
+        var model = ModelBuilder.BuildFromSections(doc, [objSec, assSec, partSec]);
+
+        Assert.Single(model.Assemblies);
+        var ass = model.Assemblies[0];
+        Assert.Null(ass.MainPart);
+        Assert.Single(ass.Parts);
+        Assert.Single(ass.Secondaries);
+        Assert.Equal(101, ass.Secondaries[0].Id);
     }
 }
