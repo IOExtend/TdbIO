@@ -149,6 +149,15 @@ public sealed class TeklaModel
         foreach (var p in Parts)
         {
             Check("length", p.Length, p.LengthOffset);
+            if (!string.IsNullOrEmpty(p.Profile))
+            {
+                string prof = p.Profile.ToUpperInvariant();
+                if (prof.Contains("NAN", StringComparison.OrdinalIgnoreCase) ||
+                    prof.Contains("INFINITY", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw Internal.FormatError.At(string.Create(CultureInfo.InvariantCulture, $"Non-finite number in profile '{p.Profile}'"), p.LengthOffset);
+                }
+            }
             if (p.StartPoint.HasValue) CheckPoint(p.StartPoint.Value);
             if (p.EndPoint.HasValue) CheckPoint(p.EndPoint.Value);
             if (p.CoordinateSystem.HasValue)

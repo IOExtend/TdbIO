@@ -515,11 +515,28 @@ public static class TdbSceneReader
             if (p.StartsWith("PL", StringComparison.OrdinalIgnoreCase))
             {
                 var parts = p[2..].Split(['*', 'x', 'X']);
-                if (parts.Length >= 2 && double.TryParse(parts[0], CultureInfo.InvariantCulture, out double t) &&
-                    double.TryParse(parts[1], CultureInfo.InvariantCulture, out double w))
+                if (parts.Length >= 2)
                 {
-                    heightMm = t;
-                    widthMm = w;
+                    if (double.TryParse(parts[0], CultureInfo.InvariantCulture, out double t) &&
+                        double.TryParse(parts[1], CultureInfo.InvariantCulture, out double w))
+                    {
+                        if (!double.IsFinite(t) || !double.IsFinite(w))
+                        {
+                            throw new InvalidDataException(string.Create(CultureInfo.InvariantCulture, $"Non-finite dimension in profile '{profile}'."));
+                        }
+                        if (t > 0 && w > 0)
+                        {
+                            heightMm = t;
+                            widthMm = w;
+                        }
+                    }
+                    else if (parts[0].Contains("NAN", StringComparison.OrdinalIgnoreCase) ||
+                             parts[1].Contains("NAN", StringComparison.OrdinalIgnoreCase) ||
+                             parts[0].Contains("INFINITY", StringComparison.OrdinalIgnoreCase) ||
+                             parts[1].Contains("INFINITY", StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new InvalidDataException(string.Create(CultureInfo.InvariantCulture, $"Non-finite dimension in profile '{profile}'."));
+                    }
                 }
             }
             else
@@ -534,6 +551,11 @@ public static class TdbSceneReader
                     widthMm = p.StartsWith("IPE") ? size * 0.5 : size;
                 }
             }
+        }
+
+        if (!double.IsFinite(widthMm) || !double.IsFinite(heightMm))
+        {
+            throw new InvalidDataException(string.Create(CultureInfo.InvariantCulture, $"Non-finite dimension in profile '{profile}'."));
         }
 
         return (widthMm * 0.5 * scale, heightMm * 0.5 * scale);

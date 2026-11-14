@@ -124,6 +124,38 @@ public sealed class TdbSceneReaderTests
     }
 
     [Fact]
+    public void Read_RejectsNonFiniteProfile()
+    {
+        var p0 = new ModelPoint(1, 0, 0, 0);
+        var p1 = new ModelPoint(2, 6000, 0, 0);
+        var beam = new ModelPart(
+            id: 101,
+            guid: Guid.NewGuid(),
+            type: 1,
+            subtype: 0,
+            phase: 1,
+            parentId: null,
+            assemblyId: null,
+            name: "BEAM",
+            profile: "PLNaN*200",
+            material: "S355J2",
+            prefix: "B",
+            startNumber: 1,
+            positionNumber: 1,
+            @class: 3,
+            finish: "",
+            startPoint: p0,
+            endPoint: p1,
+            length: 6000,
+            coordinateSystem: null);
+
+        var doc = Db1Document.Create(TdbIO.Tests.Synthetic.Db1Payload([]));
+        var model = new TeklaModel(doc, Guid.NewGuid(), assemblies: [], parts: [beam], bolts: [], welds: [], objects: [beam]);
+
+        Assert.Throws<InvalidDataException>(() => TdbSceneReader.Read(model));
+    }
+
+    [Fact]
     public void Cli_Export_CommandsWorkCorrectly()
     {
         // Test usage errors and options

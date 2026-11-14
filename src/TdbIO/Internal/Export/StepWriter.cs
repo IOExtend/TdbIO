@@ -80,12 +80,20 @@ internal sealed class StepWriter
 
     public static string Real(double v)
     {
+        if (!double.IsFinite(v))
+        {
+            throw new InvalidDataException(string.Create(CultureInfo.InvariantCulture, $"Non-finite number {v} cannot be written to IFC."));
+        }
         string text = v.ToString("0.######", CultureInfo.InvariantCulture);
         return text.Contains('.') ? text : text + ".";
     }
 
     public static string RealExact(double v)
     {
+        if (!double.IsFinite(v))
+        {
+            throw new InvalidDataException(string.Create(CultureInfo.InvariantCulture, $"Non-finite number {v} cannot be written to IFC."));
+        }
         string text = v.ToString("G17", CultureInfo.InvariantCulture);
         int expIdx = text.IndexOfAny(['e', 'E']);
         if (expIdx >= 0)

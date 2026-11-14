@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 using IOScene;
 using IOViewer.Exporters;
@@ -182,14 +183,9 @@ internal static class Cli
 
         if (name == "export")
         {
-            if (outputPath != null)
+            if (outputPath != null && AreSameFile(path, outputPath))
             {
-                string fullInput = Path.GetFullPath(path);
-                string fullOutput = Path.GetFullPath(outputPath);
-                if (string.Equals(fullInput, fullOutput, OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
-                {
-                    throw new UsageException("The output file path must not be the same as the input file.");
-                }
+                throw new UsageException("The output file path must not be the same as the input file.");
             }
 
             int formatFlags = (sceneJson ? 1 : 0) + (ifc ? 1 : 0) + (html ? 1 : 0);
@@ -388,7 +384,7 @@ internal static class Cli
         {
             if (cmd.OutputPath != null)
             {
-                WriteFileAtomically(cmd.OutputPath, tmp => model.WriteIfc(tmp));
+                WriteFileAtomically(cmd.Path, cmd.OutputPath, tmp => model.WriteIfc(tmp));
             }
             else
             {
@@ -405,7 +401,12 @@ internal static class Cli
             {
                 ModelKey = Path.GetFileNameWithoutExtension(cmd.Path)
             });
-            WriteFileAtomically(cmd.OutputPath, tmp => HtmlViewerExporter.Save(sceneResult.Document, tmp));
+            var errors = sceneResult.Document.Validate().Where(d => d.Severity == SceneSeverity.Error).ToList();
+            if (errors.Count > 0)
+            {
+                throw new InvalidDataException(errors[0].Message);
+            }
+            WriteFileAtomically(cmd.Path, cmd.OutputPath, tmp => HtmlViewerExporter.Save(sceneResult.Document, tmp));
         }
         else if (cmd.SceneJson)
         {
@@ -413,9 +414,14 @@ internal static class Cli
             {
                 ModelKey = Path.GetFileNameWithoutExtension(cmd.Path)
             });
+            var errors = sceneResult.Document.Validate().Where(d => d.Severity == SceneSeverity.Error).ToList();
+            if (errors.Count > 0)
+            {
+                throw new InvalidDataException(errors[0].Message);
+            }
             if (cmd.OutputPath != null)
             {
-                WriteFileAtomically(cmd.OutputPath, tmp =>
+                WriteFileAtomically(cmd.Path, cmd.OutputPath, tmp =>
                 {
                     if (cmd.Indent)
                     {
@@ -445,7 +451,7 @@ internal static class Cli
         {
             if (cmd.OutputPath != null)
             {
-                WriteFileAtomically(cmd.OutputPath, tmp =>
+                WriteFileAtomically(cmd.Path, cmd.OutputPath, tmp =>
                 {
                     using var fs = File.Create(tmp);
                     model.WriteJson(fs, cmd.Indent);
@@ -458,8 +464,13 @@ internal static class Cli
         }
     }
 
-    private static void WriteFileAtomically(string outputPath, Action<string> writeAction)
+    private static void WriteFileAtomically(string inputPath, string outputPath, Action<string> writeAction)
     {
+        if (AreSameFile(inputPath, outputPath))
+        {
+            throw new UsageException("The output file path must not be the same as the input file.");
+        }
+
         string fullPath = Path.GetFullPath(outputPath);
         string? dir = Path.GetDirectoryName(fullPath);
         if (string.IsNullOrEmpty(dir))
@@ -470,6 +481,10 @@ internal static class Cli
         try
         {
             writeAction(tempPath);
+            if (AreSameFile(inputPath, outputPath))
+            {
+                throw new UsageException("The output file path must not be the same as the input file.");
+            }
             File.Move(tempPath, fullPath, overwrite: true);
         }
         finally
@@ -480,6 +495,119 @@ internal static class Cli
             }
         }
     }
+
+    internal static string ResolveCanonicalPath(string path)
+    {
+        string fullPath = Path.GetFullPath(path);
+        string? root = Path.GetPathRoot(fullPath);
+        if (string.IsNullOrEmpty(root))
+        {
+            return fullPath;
+        }
+
+        string remaining = fullPath[root.Length..];
+        string current = root;
+        string[] segments = remaining.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
+
+        foreach (string segment in segments)
+        {
+            current = Path.Combine(current, segment);
+            if (Directory.Exists(current))
+            {
+                try
+                {
+                    var target = Directory.ResolveLinkTarget(current, returnFinalTarget: true);
+                    if (target != null)
+                    {
+                        current = target.FullName;
+                    }
+                }
+                catch (IOException) { }
+            }
+            else if (File.Exists(current))
+            {
+                try
+                {
+                    var target = File.ResolveLinkTarget(current, returnFinalTarget: true);
+                    if (target != null)
+                    {
+                        current = target.FullName;
+                    }
+                }
+                catch (IOException) { }
+            }
+        }
+
+        return Path.GetFullPath(current);
+    }
+
+    internal static bool AreSameFile(string path1, string path2)
+    {
+        string r1 = ResolveCanonicalPath(path1);
+        string r2 = ResolveCanonicalPath(path2);
+        if (string.Equals(r1, r2, OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (File.Exists(path1) && File.Exists(path2))
+        {
+            try
+            {
+                var f1 = new FileInfo(path1);
+                var f2 = new FileInfo(path2);
+                string? t1 = f1.ResolveLinkTarget(true)?.FullName;
+                string? t2 = f2.ResolveLinkTarget(true)?.FullName;
+                string comp1 = t1 != null ? ResolveCanonicalPath(t1) : r1;
+                string comp2 = t2 != null ? ResolveCanonicalPath(t2) : r2;
+                if (string.Equals(comp1, comp2, OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+            catch (IOException) { }
+
+            if (OperatingSystem.IsWindows())
+            {
+                try
+                {
+                    using var s1 = new FileStream(path1, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                    using var s2 = new FileStream(path2, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                    if (GetFileInformationByHandle(s1.SafeFileHandle.DangerousGetHandle(), out var i1) &&
+                        GetFileInformationByHandle(s2.SafeFileHandle.DangerousGetHandle(), out var i2))
+                    {
+                        if (i1.VolumeSerialNumber == i2.VolumeSerialNumber &&
+                            i1.FileIndexHigh == i2.FileIndexHigh &&
+                            i1.FileIndexLow == i2.FileIndexLow)
+                        {
+                            return true;
+                        }
+                    }
+                }
+                catch (Exception) { }
+            }
+        }
+
+        return false;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct BY_HANDLE_FILE_INFORMATION
+    {
+        public uint FileAttributes;
+        public System.Runtime.InteropServices.ComTypes.FILETIME CreationTime;
+        public System.Runtime.InteropServices.ComTypes.FILETIME LastAccessTime;
+        public System.Runtime.InteropServices.ComTypes.FILETIME LastWriteTime;
+        public uint VolumeSerialNumber;
+        public uint FileSizeHigh;
+        public uint FileSizeLow;
+        public uint NumberOfLinks;
+        public uint FileIndexHigh;
+        public uint FileIndexLow;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetFileInformationByHandle(IntPtr hFile, out BY_HANDLE_FILE_INFORMATION lpFileInformation);
 
     // The number of blocks below the root and the deepest level (the root is level 0).
     private static (int Blocks, int Depth) Measure(TemplateBlock block)
