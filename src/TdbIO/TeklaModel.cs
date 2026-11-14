@@ -101,6 +101,21 @@ public sealed class TeklaModel
     /// <summary>Writes the decoded model as JSON using a <see cref="System.Text.Json.Utf8JsonWriter"/>.</summary>
     /// <param name="writer">The UTF-8 JSON writer.</param>
     public void WriteJson(System.Text.Json.Utf8JsonWriter writer) => Internal.ModelJsonWriter.Write(this, writer);
+
+    /// <summary>Serializes the decoded model to an IFC STEP physical file string.</summary>
+    /// <param name="options">Options controlling IFC export, or <c>null</c> for defaults.</param>
+    /// <returns>An IFC STEP string representation of the model.</returns>
+    public string ToIfc(TeklaIfcExportOptions? options = null) => Internal.Export.IfcExporter.ToString(this, options);
+
+    /// <summary>Writes the decoded model as an IFC STEP physical file to a stream.</summary>
+    /// <param name="stream">The output stream.</param>
+    /// <param name="options">Options controlling IFC export, or <c>null</c> for defaults.</param>
+    public void WriteIfc(Stream stream, TeklaIfcExportOptions? options = null) => Internal.Export.IfcExporter.Write(this, stream, options);
+
+    /// <summary>Writes the decoded model as an IFC STEP physical file to a file path.</summary>
+    /// <param name="path">The destination file path.</param>
+    /// <param name="options">Options controlling IFC export, or <c>null</c> for defaults.</param>
+    public void WriteIfc(string path, TeklaIfcExportOptions? options = null) => Internal.Export.IfcExporter.WriteFile(this, path, options);
 }
 
 /// <summary>Base class for all entities in a Tekla Structures model.</summary>
@@ -136,6 +151,11 @@ public class ModelObject
 
     /// <summary>The unique RFC 4122 GUID of the object.</summary>
     public Guid Guid { get; }
+
+    /// <summary>The 22-character buildingSMART IFC GlobalId corresponding to <see cref="Guid"/>, or derived from <see cref="Id"/>.</summary>
+    public string IfcGuid => Guid != Guid.Empty
+        ? Internal.Export.IfcGuid.ToIfcGuid(Guid)
+        : Internal.Export.IfcGuid.FromElementId(Id, GetType().Name);
 
     /// <summary>The object type code (e.g. 1 for part, 2 for assembly, 3 for connection, 9 for bolt, 13 for weld).</summary>
     public int Type { get; }
@@ -472,4 +492,14 @@ public readonly record struct ModelBoltHole(
 
     /// <inheritdoc/>
     public override string ToString() => $"Hole #{No} in Part #{PartId} Grip={Length:F1}";
+}
+
+/// <summary>Utilities for buildingSMART IFC GlobalId generation and conversion.</summary>
+public static class TeklaIfcGuid
+{
+    /// <summary>Converts a .NET Guid to a 22-character buildingSMART IFC GlobalId.</summary>
+    public static string ToIfcGuid(Guid guid) => Internal.Export.IfcGuid.ToIfcGuid(guid);
+
+    /// <summary>Generates a deterministic 22-character buildingSMART IFC GlobalId from an element identifier.</summary>
+    public static string FromElementId(int elemId, string ns = "Tekla") => Internal.Export.IfcGuid.FromElementId(elemId, ns);
 }

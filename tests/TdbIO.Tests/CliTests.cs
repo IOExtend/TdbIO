@@ -413,6 +413,54 @@ public sealed class CliTests : IDisposable
         Assert.Equal(1000.0, json.RootElement.GetProperty("parts")[0].GetProperty("length").GetDouble());
     }
 
+    [Fact]
+    public void Export_ToIfcHtmlAndSceneJson_Succeeds()
+    {
+        var objBytes = new byte[ObjectRow.ExpectedRowSize];
+        BinaryPrimitives.WriteInt32LittleEndian(objBytes.AsSpan(0), 101);
+        BinaryPrimitives.WriteInt32LittleEndian(objBytes.AsSpan(28), 1); // Part
+
+        var partBytes = new byte[PartRow.ExpectedRowSize];
+        BinaryPrimitives.WriteInt32LittleEndian(partBytes.AsSpan(0), 101);
+        BinaryPrimitives.WriteDoubleLittleEndian(partBytes.AsSpan(56), 1000.0);
+
+        byte[] unkeyedSec = Db1Section(null, 4, [1], (0x04, Counting(4), 1, 2));
+        byte[] objSec = Db1Section(ObjectRow.TableKey, ObjectRow.ExpectedRowSize, [1], (0x04, objBytes, 1, 2));
+        byte[] partSec = Db1Section(PartRow.TableKey, PartRow.ExpectedRowSize, [1], (0x04, partBytes, 1, 2));
+
+        string okFile = File("export_test.db1", Gzip(Db1TablesPayload(unkeyedSec, objSec, partSec)));
+
+        // 1. Export to IFC file
+        string ifcOut = Path.Combine(_folder, "model.ifc");
+        var (ifcExit, _, ifcErr) = Run("export", okFile, ifcOut);
+        Assert.Equal(Cli.ExitOk, ifcExit);
+        Assert.Empty(ifcErr);
+        Assert.True(System.IO.File.Exists(ifcOut));
+        Assert.Contains("ISO-10303-21;", System.IO.File.ReadAllText(ifcOut));
+
+        // 2. Export to HTML viewer file
+        string htmlOut = Path.Combine(_folder, "model.html");
+        var (htmlExit, _, htmlErr) = Run("export", okFile, htmlOut);
+        Assert.Equal(Cli.ExitOk, htmlExit);
+        Assert.Empty(htmlErr);
+        Assert.True(System.IO.File.Exists(htmlOut));
+        Assert.Contains("<!DOCTYPE html>", System.IO.File.ReadAllText(htmlOut));
+
+        // 3. Export to Scene JSON file
+        string sceneJsonOut = Path.Combine(_folder, "model.scene.json");
+        var (sceneExit, _, sceneErr) = Run("export", okFile, sceneJsonOut, "--scene-json");
+        Assert.Equal(Cli.ExitOk, sceneExit);
+        Assert.Empty(sceneErr);
+        Assert.True(System.IO.File.Exists(sceneJsonOut));
+        Assert.Contains("\"Kind\"", System.IO.File.ReadAllText(sceneJsonOut));
+
+        // 4. Export IFC to stdout
+        var (stdoutIfcExit, stdoutIfc, stdoutIfcErr) = Run("export", okFile, "--ifc");
+        Assert.Equal(Cli.ExitOk, stdoutIfcExit);
+        Assert.Empty(stdoutIfcErr);
+        Assert.StartsWith("ISO-10303-21;", stdoutIfc);
+    }
+
     private static void AssertInputError(params string[] args)
     {
         var (exit, stdout, stderr) = Run(args);

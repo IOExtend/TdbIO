@@ -10,8 +10,11 @@ Build settings shared by every project live in `Directory.Build.props`; the SDK 
 
 ## Runtime packages
 
-None. The library and the command line tool reference no packages and contain no third-party code. They use only the
-.NET runtime libraries:
+None for the core engine (`TdbIO`). The engine library references no external packages and contains no third-party code.
+`TdbIO.Scene` references `IOScene` `[0.1.0, 0.2.0-0.0)` as the neutral scene contract.
+`TdbIO.Cli` references `TdbIO.Scene` and `IOViewer` `0.3.1` for standalone HTML 3D viewer export.
+
+They use the following .NET runtime libraries:
 
 | Runtime library | Used for |
 | --- | --- |

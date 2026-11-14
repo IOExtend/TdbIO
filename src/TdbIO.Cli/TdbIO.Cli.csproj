@@ -12,6 +12,13 @@
 
   <ItemGroup>
     <ProjectReference Include="..\TdbIO\TdbIO.csproj" />
+    <ProjectReference Include="..\TdbIO.Scene\TdbIO.Scene.csproj" />
+    <PackageReference Include="IOViewer" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="TdbIO.Tests" />
+    <InternalsVisibleTo Include="TdbIO.Scene.Tests" />
   </ItemGroup>
 
 </Project>

@@ -7,6 +7,12 @@
   <!-- Runtime dependencies of the library: none. See docs/dependencies.md. -->
 
   <ItemGroup>
+    <!-- Dependencies of TdbIO.Scene and TdbIO.Cli. -->
+    <PackageVersion Include="IOScene" Version="[0.1.0, 0.2.0-0.0)" />
+    <PackageVersion Include="IOViewer" Version="0.3.1" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Build-time only. -->
     <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.403" />
   </ItemGroup>

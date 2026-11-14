@@ -92,6 +92,22 @@ tdbio info list.tpl --encoding cp1252
 tdbio info list.xsr --json
 ```
 
+Export decoded Tekla model objects to JSON, Industry Foundation Classes (IFC) or a standalone 3D HTML viewer:
+
+```sh
+# Export to Tekla object model JSON
+tdbio export model.db1 model.json
+
+# Export to neutral IOScene JSON
+tdbio export model.db1 model.scene.json --scene-json
+
+# Export to IFC (IFC2x3 / IFC4)
+tdbio export model.db1 model.ifc
+
+# Generate an interactive 3D WebGL HTML viewer that works offline
+tdbio export model.db1 viewer.html
+```
+
 Every command takes `--json` to write one JSON object instead of text. Warnings go to standard error and do not change
 the exit code. The outputs above come from small synthetic files; the values are made up. Run `tdbio --help` for the
 usage, and see [the command line](docs/cli.md) for every key, column and JSON property.
