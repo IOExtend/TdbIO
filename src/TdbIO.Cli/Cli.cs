@@ -15,15 +15,18 @@ internal static class Cli
         Usage: tdbio info <file> [--json] [--encoding ascii|utf-8|cp1251|cp1252]
                tdbio tables <file> [--json]
                tdbio text <file> [--json]
+               tdbio export <file> [--indent]
                tdbio --help | -h | --version
 
         Commands:
           info      The kind of the file and its main values.
           tables    The table sections of a model database (.db1) or a DBV@ file, one line each.
           text      The text chains of a model database (.db1), one line each. Save stamps show only their date.
+          export    Decodes the object model of a model database (.db1) and writes it as JSON.
 
         Options:
           --json      Write one JSON object instead of text.
+          --indent    Format the JSON output with indentation (export only).
           --encoding  The encoding of a template or report, instead of detecting it (info only).
 
         Warnings go to stderr and do not change the exit code.
@@ -34,7 +37,7 @@ internal static class Cli
     private static readonly string[] TextColumns = ["section", "headId", "rows", "length", "stamp", "savedAt", "text"];
     private static readonly string[] OrphanColumns = ["section", "id"];
 
-    private sealed record Command(string Name, string Path, bool Json, Encoding? Encoding);
+    private sealed record Command(string Name, string Path, bool Json, bool Indent, Encoding? Encoding);
 
     // A usage error found while parsing or after the kind is known.
     private sealed class UsageException(string message) : Exception(message);
@@ -68,6 +71,7 @@ internal static class Cli
             {
                 case "info": Info(output, doc, command.Json); break;
                 case "tables": Tables(output, doc, command.Json); break;
+                case "export": Export(output, doc, command.Indent); break;
                 default: Text(output, doc, command.Json); break;
             }
             stdout.Write(output.ToString());
@@ -92,11 +96,12 @@ internal static class Cli
     {
         if (args.Length == 0) throw new UsageException("No command given.");
         string name = args[0];
-        if (name is not ("info" or "tables" or "text")) throw new UsageException($"Unknown command '{name}'.");
+        if (name is not ("info" or "tables" or "text" or "export")) throw new UsageException($"Unknown command '{name}'.");
 
         string? path = null;
         string? encodingName = null;
         bool json = false;
+        bool indent = false;
         for (int i = 1; i < args.Length; i++)
         {
             string arg = args[i];
@@ -104,6 +109,11 @@ internal static class Cli
             {
                 if (json) throw new UsageException("Option '--json' is repeated.");
                 json = true;
+            }
+            else if (arg == "--indent" && name == "export")
+            {
+                if (indent) throw new UsageException("Option '--indent' is repeated.");
+                indent = true;
             }
             else if (arg == "--encoding" && name == "info")
             {
@@ -117,7 +127,7 @@ internal static class Cli
             else path = arg;
         }
         if (path == null) throw new UsageException("No file given.");
-        return new Command(name, path, json, encodingName == null ? null : EncodingOf(encodingName));
+        return new Command(name, path, json, indent, encodingName == null ? null : EncodingOf(encodingName));
     }
 
     // Strict encodings: a byte the encoding does not define is an input error, never replaced.
@@ -268,6 +278,13 @@ internal static class Cli
             Output.WriteTsv(w, TextColumns, chains);
             foreach (var orphan in orphans) w.WriteLine($"{orphan[0]}\t-\torphan\t{orphan[1]}");
         }
+    }
+
+    private static void Export(TextWriter w, TdbDocument doc, bool indent)
+    {
+        if (doc is not Db1Document db1) throw new WrongKindException($"'export' needs a model database (.db1), not {doc.Kind}.");
+        var model = db1.ReadModel();
+        w.WriteLine(model.ToJson(indent));
     }
 
     // The number of blocks below the root and the deepest level (the root is level 0).

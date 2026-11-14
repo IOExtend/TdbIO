@@ -87,6 +87,20 @@ public sealed class TeklaModel
 
     /// <summary>Finds a weld by its integer identifier, or returns <c>null</c> if not found.</summary>
     public ModelWeld? FindWeld(int id) => _weldsById.GetValueOrDefault(id);
+
+    /// <summary>Serializes the decoded model to a JSON string.</summary>
+    /// <param name="indented">Whether to format the JSON with indentation.</param>
+    /// <returns>A JSON string representation of the model.</returns>
+    public string ToJson(bool indented = false) => Internal.ModelJsonWriter.ToJson(this, indented);
+
+    /// <summary>Writes the decoded model as JSON to a stream.</summary>
+    /// <param name="stream">The output stream.</param>
+    /// <param name="indented">Whether to format the JSON with indentation.</param>
+    public void WriteJson(Stream stream, bool indented = false) => Internal.ModelJsonWriter.Write(this, stream, indented);
+
+    /// <summary>Writes the decoded model as JSON using a <see cref="System.Text.Json.Utf8JsonWriter"/>.</summary>
+    /// <param name="writer">The UTF-8 JSON writer.</param>
+    public void WriteJson(System.Text.Json.Utf8JsonWriter writer) => Internal.ModelJsonWriter.Write(this, writer);
 }
 
 /// <summary>Base class for all entities in a Tekla Structures model.</summary>

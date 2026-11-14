@@ -60,6 +60,9 @@ public sealed class CliTests : IDisposable
     [InlineData("info", "a", "--encoding", "utf-16")]
     [InlineData("info", "a", "--encoding", "ascii", "--encoding", "ascii")]
     [InlineData("tables", "a", "--encoding", "ascii")]
+    [InlineData("export")]
+    [InlineData("export", "a", "--indent", "--indent")]
+    [InlineData("export", "a", "--encoding", "ascii")]
     [InlineData("text", "-h")]
     [InlineData("--help", "x")]
     public void UsageErrorsExitOneWithTwoLines(params string[] args)
@@ -316,6 +319,23 @@ public sealed class CliTests : IDisposable
     [Fact]
     public void BrokenTablesAreAnInputErrorWithNoOutput() =>
         AssertInputError("tables", File("m.db1", Gzip(Concat(XsteelHead(), IdMapBody([])))));
+
+    [Fact]
+    public void ExportOnDbvIsAnInputError() => AssertInputError("export", Dbv());
+
+    [Fact]
+    public void ExportOutputsJsonForDb1()
+    {
+        var (exit, stdout, stderr) = Run("export", Db1WithTables(), "--indent");
+        Assert.Equal(Cli.ExitOk, exit);
+        Assert.Equal("", stderr);
+        using var json = JsonDocument.Parse(stdout);
+        var root = json.RootElement;
+        Assert.True(root.TryGetProperty("modelGuid", out _));
+        Assert.True(root.TryGetProperty("assemblies", out _));
+        Assert.True(root.TryGetProperty("parts", out _));
+        Assert.True(root.TryGetProperty("counts", out _));
+    }
 
     private static void AssertInputError(params string[] args)
     {
