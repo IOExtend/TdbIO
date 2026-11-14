@@ -317,6 +317,37 @@ public sealed class CliTests : IDisposable
     public void BrokenTablesAreAnInputErrorWithNoOutput() =>
         AssertInputError("tables", File("m.db1", Gzip(Concat(XsteelHead(), IdMapBody([])))));
 
+    [Fact]
+    public void BrokenTextSectionInInfoPrintsHeaderAndReportsError()
+    {
+        var brokenText = Concat(TextSectionSignature, TextRow(1, 9, 1, []), [0], TextSectionCloser);
+        byte[] payload = Concat(XsteelHead(), IdMapBody([]), brokenText);
+        string file = File("broken_text.db1", Gzip(payload));
+        var (exit, stdout, stderr) = Run("info", file);
+        Assert.Equal(Cli.ExitInput, exit);
+        var f = Fields(stdout);
+        Assert.Equal("Db1", f["kind"]);
+        Assert.Equal("9.99", f["version"]);
+        Assert.Equal("0", f["idMapEntries"]);
+        Assert.False(f.ContainsKey("textSections"));
+        Assert.StartsWith("tdbio: ", Assert.Single(Lines(stderr)));
+    }
+
+    [Fact]
+    public void BrokenTextSectionInJsonInfoPrintsHeaderAndReportsError()
+    {
+        var brokenText = Concat(TextSectionSignature, TextRow(1, 9, 1, []), [0], TextSectionCloser);
+        byte[] payload = Concat(XsteelHead(), IdMapBody([]), brokenText);
+        string file = File("broken_text_json.db1", Gzip(payload));
+        var (exit, stdout, stderr) = Run("info", file, "--json");
+        Assert.Equal(Cli.ExitInput, exit);
+        using var json = JsonDocument.Parse(stdout);
+        Assert.Equal("Db1", json.RootElement.GetProperty("kind").GetString());
+        Assert.Equal("9.99", json.RootElement.GetProperty("version").GetString());
+        Assert.False(json.RootElement.TryGetProperty("textSections", out _));
+        Assert.StartsWith("tdbio: ", Assert.Single(Lines(stderr)));
+    }
+
     private static void AssertInputError(params string[] args)
     {
         var (exit, stdout, stderr) = Run(args);
