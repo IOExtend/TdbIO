@@ -1,0 +1,19 @@
+# Source and text files are stored and checked out with LF.
+* text=auto eol=lf
+
+# Model files, vectors and packages are never normalised.
+*.db1 binary
+*.db2 binary
+*.db5 binary
+*.db binary
+*.bak binary
+*.idrm binary
+*.gz binary
+*.bin binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.nupkg binary
+*.snupkg binary

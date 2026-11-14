@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>TdbIO.Cli</PackageId>
+    <Description>Command line tool that reports the structure of Tekla Structures model files, DSTV NC files, templates and reports.</Description>
+    <OutputType>Exe</OutputType>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>tdbio</ToolCommandName>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <RootNamespace>TdbIO.CommandLine</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TdbIO\TdbIO.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Reads Tekla Structures model files (.db1, .db2, DBV@ files, id range and GUID map files), DSTV NC files (.nc1), templates (.tpl, .rpt) and reports (.xsr). Pure managed code, no dependencies.</Description>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <RootNamespace>TdbIO</RootNamespace>
+    <AssemblyName>TdbIO</AssemblyName>
+    <PackageId>TdbIO</PackageId>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="TdbIO.Tests" />
+  </ItemGroup>
+
+</Project>

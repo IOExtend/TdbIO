@@ -1,0 +1,27 @@
+{
+  "metadata": [
+    {
+      "src": [
+        { "src": "src/TdbIO", "files": ["TdbIO.csproj"] }
+      ],
+      "dest": "docs/api",
+      "properties": { "TargetFramework": "net10.0" },
+      "outputFormat": "apiPage"
+    }
+  ],
+  "build": {
+    "content": [
+      { "src": "docs", "files": ["*.md", "toc.yml", "api/**/*.yml", "api/**/*.md"] }
+    ],
+    "resource": [
+      { "src": "docs", "files": ["images/**"] }
+    ],
+    "output": "_site",
+    "globalMetadata": {
+      "_appTitle": "TdbIO",
+      "_appFooter": "TdbIO is licensed under the MIT License. Not affiliated with Trimble.",
+      "_enableSearch": true
+    },
+    "template": ["default", "modern"]
+  }
+}

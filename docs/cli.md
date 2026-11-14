@@ -1,0 +1,172 @@
+---
+title: Command line and exit codes
+---
+
+# Command line and exit codes
+
+The `tdbio` tool (package `TdbIO.Cli`) reports the structure of a file. It prints text or JSON to standard output,
+writes messages and warnings to standard error and tells success from failure by its exit code. It uses only the public
+API of the library.
+
+```text
+Usage: tdbio info <file> [--json] [--encoding ascii|utf-8|cp1251|cp1252]
+       tdbio tables <file> [--json]
+       tdbio text <file> [--json]
+       tdbio --help | -h | --version
+```
+
+## Commands
+
+| Command | Works on | Output |
+| --- | --- | --- |
+| `tdbio info <file>` | every supported kind | `key: value` lines: the kind, its main values and the number of warnings. |
+| `tdbio tables <file>` | model databases (`.db1`), DBV@ files | A tab-separated header line, then one line per table section. |
+| `tdbio text <file>` | model databases (`.db1`) | A tab-separated header line, then one line per text chain, then one line per orphan row. |
+| `tdbio --help`, `tdbio -h` | | The usage text, on standard output. |
+| `tdbio --version` | | `tdbio <version>`, for example `tdbio 0.1.0`. |
+
+The command comes first; options may come before or after the file. The kind of the file is found from its content, not
+from its extension (reports, which have no signature, are recognised by the `.xsr` file name).
+
+## Options
+
+| Option | Commands | Effect |
+| --- | --- | --- |
+| `--json` | all | Write one indented JSON object (UTF-8) instead of text. |
+| `--encoding <name>` | `info` | Read a template or report with this encoding instead of detecting it: `ascii`, `utf-8`, `cp1251` or `cp1252`. The encoding is strict: a byte it does not define is an input error. Given for any other kind of file, it is a usage error. |
+
+An option given twice is a usage error.
+
+## Exit codes
+
+| Code | Name | Meaning |
+| --- | --- | --- |
+| 0 | done | The command finished and its output was written. Warnings do not change the code. |
+| 1 | usage | The command line is wrong: no command, an unknown command or option, no file, an empty file name, an extra argument, an option repeated, `--encoding` without a value or with an unknown one, or `--encoding` for a file that is not a template or report. Two lines on standard error: `tdbio: <problem>` and `Run 'tdbio --help' for usage.` |
+| 2 | input | The file cannot be used: it does not exist or cannot be read, is not recognised, is cut or malformed, is over a limit, is not supported (a drawing file, UTF-16 text), or is of a kind the command does not handle (for example `tables` on a `.nc1` file). One line on standard error, `tdbio: <problem>`, no stack trace. |
+
+The whole output is built before anything is written, so a failing command writes nothing to standard output. A
+message about malformed data ends with the offset of the problem, for example
+`tdbio: not a recognised Tekla file at offset 0x0`.
+
+Warnings are written after the output, one line each: `tdbio: warning: <warning>`. They name an offset or a line, never
+text from the file.
+
+## info
+
+The first key is `kind`, the name of the `TdbFileKind` value. In text output the last key is `warnings`, the number of
+warnings; in JSON output `warnings` is the list of warning lines. A value that is not there is `-` in text and `null` in
+JSON.
+
+| Kind | Keys |
+| --- | --- |
+| `Db1` | `version`, `modelGuid`, `idMapEntries`, `idMapField65` (hex in text), `idMapField73`, `textSections`, `textChains`, `saveStamps`, `lastSavedAt` (the latest save stamp date) |
+| `Db2` | `version`, `modelGuid`, `records`, `rows` (the sum of the row counts) |
+| `GuidMapper` | `pairs` |
+| `IdRanges` | `next`, `ranges` |
+| `History` | `pageSize`, `pageCount`, `length` |
+| `Dbv` | `name`, `records` (GUID records), `sections`, `rows` (the sum over all sections) |
+| `Nc1` | `blocks` (the block codes in order), `mark`, `material`, `quantity`, `profile`, `length` |
+| `Template` | `encoding`, `rootKeyword`, `instance`, `type`, `version` (the values of the root properties of these names), `blocks` (the number of blocks below the root), `maxDepth` (the deepest block level; the root is level 0) |
+| `Report` | `encoding`, `lines`, `pages` (the number of form feeds), `endsWithLineBreak` |
+
+For a model database `info` also reads the text sections, so a malformed text section makes it fail with exit code 2.
+
+Example, on a synthetic DSTV NC file:
+
+```text
+$ tdbio info part.nc1
+kind: Nc1
+blocks: ST,AK,EN
+mark: A1
+material: GRADE-X
+quantity: 3
+profile: PL12
+length: 100
+warnings: 0
+```
+
+```json
+$ tdbio info part.nc1 --json
+{
+  "kind": "Nc1",
+  "blocks": [
+    "ST",
+    "AK",
+    "EN"
+  ],
+  "mark": "A1",
+  "material": "GRADE-X",
+  "quantity": 3,
+  "profile": "PL12",
+  "length": 100,
+  "warnings": []
+}
+```
+
+With `--encoding`, `encoding` shows the web name of the encoding used, for example `windows-1252` for `cp1252`.
+
+## tables
+
+Columns, separated by tabs:
+
+| Column | Value |
+| --- | --- |
+| `ordinal` | The position of the section in the file, from 0. |
+| `offset` | Where the section starts (the key when there is one, otherwise the separator), hex. |
+| `key` | The raw key stored before the section, or `-`. Always `-` for DBV@ files. |
+| `rowSize` | The number of body bytes in every row. |
+| `descriptors` | The raw descriptor words, separated by commas. |
+| `rows` | The number of rows. |
+| `end` | The offset just after the section, hex. |
+
+Offsets refer to the unpacked file. Row bodies are never printed.
+
+```text
+$ tdbio tables model.db1
+ordinal	offset	key	rowSize	descriptors	rows	end
+0	0x7D	-	8	1,0	2	0xB4
+1	0xB4	42	4	1	1	0xDA
+```
+
+With `--json` the object has `kind`, `sections` (one object per section with the column names as properties; offsets
+are decimal numbers, `key` is `null` when absent and `descriptors` is an array) and `warnings`.
+
+## text
+
+Columns, separated by tabs:
+
+| Column | Value |
+| --- | --- |
+| `section` | The index of the text section, from 0. |
+| `headId` | The id of the head row of the chain. |
+| `rows` | The number of rows in the chain. |
+| `length` | The number of text bytes. |
+| `stamp` | `true` for a save stamp, else `false`. |
+| `savedAt` | The date and time of a save stamp, `yyyy-MM-ddTHH:mm:ss`, or `-`. |
+| `text` | The text bytes, escaped: printable ASCII as is, `\\`, `\t`, `\n`, and `\xNN` for every other byte. `-` for a save stamp. |
+
+The text of a save stamp is never printed: besides the date it can name people or machines. Rows that belong to no
+chain follow the chains, one line each: the section index, `-`, `orphan` and the row id.
+
+```text
+$ tdbio text model.db1
+section	headId	rows	length	stamp	savedAt	text
+0	1	1	6	false	-	Grid A
+0	10	2	42	true	2026-02-01T10:20:30	-
+```
+
+With `--json` the object has `kind`, `chains` (one object per chain with the column names as properties; `savedAt` and
+`text` are `null` when absent), `orphans` (objects with `section` and `id`) and `warnings`.
+
+## JSON output
+
+Numbers are decimal, GUIDs use the `D` format (`xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`) and dates the format
+`yyyy-MM-ddTHH:mm:ss`. The input path is never written. Warnings are both in the `warnings` array and on standard error.
+
+## Text output
+
+Each value fits on one line: control characters in text taken from a file are written as `\xNN`. Lists are joined with
+commas. Numbers use the invariant culture.
+
+All examples on this page come from small synthetic files; the values are made up.
