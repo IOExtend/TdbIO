@@ -24,28 +24,43 @@ internal static class Nc1Reader
             throw FormatError.At("DSTV file is larger than the 16 MiB limit", MaxFileLength);
         if (!FirstLineIsSt(data)) throw FormatError.At("not a DSTV file: line 1 is not ST", 0, 1);
 
-        var lines = SplitLines(data);
-        var (comment, fields) = ReadStBlock(lines, data.Length);
+        var reader = new LineReader(data);
+        reader.ReadLine("DSTV file ends inside the ST block", data.Length);
+
+        var (comment, fields, length, stRaw) = ReadStBlock(ref reader, data.Length);
         var blocks = new List<Nc1Block>
         {
-            new("ST", 1, lines.Skip(1).Take(StLines - 1).Select(l => l.Text).ToArray(), []),
+            new("ST", 1, stRaw, []),
         };
 
-        int at = StLines;
-        while (at < lines.Count)
+        Line head = reader.ReadLine("DSTV file ends inside the ST block", data.Length);
+        if (!IsCode(head.Text))
+            throw Error("the ST block is not followed by a block code", head);
+
+        while (head.Text is not null)
         {
-            Line head = lines[at];
-            int end = at + 1;
-            while (end < lines.Count && !IsCode(lines[end].Text)) end++;
-            var body = lines.Skip(at + 1).Take(end - at - 1).ToArray();
-            var raw = body.Select(l => l.Text).ToArray();
+            var body = new List<Line>();
+            Line nextHead = default;
+            while (reader.TryReadLine(out Line line))
+            {
+                if (IsCode(line.Text))
+                {
+                    nextHead = line;
+                    break;
+                }
+                body.Add(line);
+            }
+
+            var raw = new string[body.Count];
+            for (int i = 0; i < body.Count; i++) raw[i] = body[i].Text;
+
             switch (head.Text)
             {
                 case "ST":
                     throw Error("an ST block may only start the file", head);
                 case "EN":
-                    if (body.Length > 0) throw Error("data after the EN block", body[0]);
-                    if (end < lines.Count) throw Error("data after the EN block", lines[end]);
+                    if (body.Count > 0) throw Error("data after the EN block", body[0]);
+                    if (nextHead.Text is not null) throw Error("data after the EN block", nextHead);
                     blocks.Add(new("EN", head.Number, raw, []));
                     break;
                 case "AK":
@@ -59,13 +74,13 @@ internal static class Nc1Reader
                     blocks.Add(new(head.Text, head.Number, raw, []));
                     break;
             }
-            at = end;
+            head = nextHead;
         }
+
         if (blocks[^1].Code != "EN")
-            throw FormatError.At("DSTV file is cut: the last block is not EN", data.Length, lines.Count + 1);
+            throw FormatError.At("DSTV file is cut: the last block is not EN", data.Length, reader.LineNumber + 1);
 
         int? quantity = int.TryParse(fields[5], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out int q) ? q : null;
-        decimal length = ParseDecimal(fields[8], lines[2 + 8]);
         return new Nc1Document(comment, fields, quantity, length, blocks, warnings);
     }
 
@@ -75,48 +90,75 @@ internal static class Nc1Reader
         return (end < 0 ? data : data[..end]).SequenceEqual("ST"u8);
     }
 
-    /// <summary>Splits on CR LF only. Every byte is checked: ASCII, no control bytes, no lone CR or LF, and the last line
-    /// must end with CR LF.</summary>
-    private static List<Line> SplitLines(ReadOnlySpan<byte> data)
+    private ref struct LineReader
     {
-        var lines = new List<Line>();
-        int start = 0;
-        for (int i = 0; i < data.Length; i++)
+        private readonly ReadOnlySpan<byte> _data;
+        private int _position;
+        private int _lineNumber;
+
+        public LineReader(ReadOnlySpan<byte> data)
         {
-            byte b = data[i];
-            int number = lines.Count + 1;
-            if (b == '\r')
-            {
-                if (i + 1 >= data.Length || data[i + 1] != '\n')
-                    throw FormatError.At("CR not followed by LF", i, number);
-                lines.Add(new(Encoding.ASCII.GetString(data[start..i]), start, number));
-                i++;
-                start = i + 1;
-                continue;
-            }
-            if (b == '\n') throw FormatError.At("LF without CR", i, number);
-            if (b >= 0x80) throw FormatError.At($"byte 0x{b:X2} is not ASCII", i, number);
-            if (b < 0x20 || b == 0x7F) throw FormatError.At($"control byte 0x{b:X2}", i, number);
-            if (i - start >= MaxLineLength)
-                throw FormatError.At("line is longer than the 4096 character limit", start, number);
+            _data = data;
+            _position = 0;
+            _lineNumber = 0;
         }
-        if (start != data.Length)
-            throw FormatError.At("DSTV file is cut: the last line does not end with CR LF", start, lines.Count + 1);
-        return lines;
+
+        public int LineNumber => _lineNumber;
+
+        public bool TryReadLine(out Line line)
+        {
+            if (_position >= _data.Length)
+            {
+                line = default;
+                return false;
+            }
+
+            int start = _position;
+            int number = ++_lineNumber;
+
+            for (int i = start; i < _data.Length; i++)
+            {
+                byte b = _data[i];
+                if (b == '\r')
+                {
+                    if (i + 1 >= _data.Length || _data[i + 1] != '\n')
+                        throw FormatError.At("CR not followed by LF", i, number);
+                    line = new Line(Encoding.ASCII.GetString(_data[start..i]), start, number);
+                    _position = i + 2;
+                    return true;
+                }
+                if (b == '\n') throw FormatError.At("LF without CR", i, number);
+                if (b >= 0x80) throw FormatError.At($"byte 0x{b:X2} is not ASCII", i, number);
+                if (b < 0x20 || b == 0x7F) throw FormatError.At($"control byte 0x{b:X2}", i, number);
+                if (i - start >= MaxLineLength)
+                    throw FormatError.At("line is longer than the 4096 character limit", start, number);
+            }
+
+            throw FormatError.At("DSTV file is cut: the last line does not end with CR LF", start, number);
+        }
+
+        public Line ReadLine(string eofMessage, long eofOffset)
+        {
+            if (!TryReadLine(out Line line))
+                throw FormatError.At(eofMessage, eofOffset, _lineNumber + 1);
+            return line;
+        }
     }
 
-    private static (string Comment, string[] Fields) ReadStBlock(List<Line> lines, long length)
+    private static (string Comment, string[] Fields, decimal Length, string[] RawLines) ReadStBlock(ref LineReader reader, long length)
     {
-        if (lines.Count <= StLines)
-            throw FormatError.At("DSTV file ends inside the ST block", length, lines.Count + 1);
+        var rawLines = new string[StLines - 1];
 
-        Line second = lines[1];
+        Line second = reader.ReadLine("DSTV file ends inside the ST block", length);
         if (!second.Text.StartsWith("** ", StringComparison.Ordinal)) throw Error("line 2 does not start with '** '", second);
+        rawLines[0] = second.Text;
 
         var fields = new string[FieldCount];
+        decimal partLength = 0;
         for (int n = 1; n <= FieldCount; n++)
         {
-            Line line = lines[n + 1];
+            Line line = reader.ReadLine("DSTV file ends inside the ST block", length);
+            rawLines[n] = line.Text;
             if (line.Text.Length == 0) throw Error($"ST field {n} is empty", line);
             if (n <= TextFields)
             {
@@ -127,21 +169,25 @@ internal static class Nc1Reader
             {
                 string value = line.Text.Trim(' ');
                 if (!IsDecimal(value)) throw Error($"ST field {n} is not a number", line);
-                ParseDecimal(value, line);
+                decimal parsed = ParseDecimal(value, line);
+                if (n == 9) partLength = parsed;
                 fields[n - 1] = value;
             }
         }
-        for (int i = FieldCount + 2; i < StLines; i++)
-            if (lines[i].Text.Length != 0) throw Error($"line {i + 1} of the ST block is not empty", lines[i]);
-        if (!IsCode(lines[StLines].Text)) throw Error("the ST block is not followed by a block code", lines[StLines]);
-        return (second.Text[3..], fields);
+        for (int i = FieldCount + 1; i < StLines - 1; i++)
+        {
+            Line line = reader.ReadLine("DSTV file ends inside the ST block", length);
+            rawLines[i] = line.Text;
+            if (line.Text.Length != 0) throw Error($"line {line.Number} of the ST block is not empty", line);
+        }
+        return (second.Text[3..], fields, partLength, rawLines);
     }
 
-    private static Nc1Line[] ReadAk(Line head, Line[] body, List<string> warnings)
+    private static Nc1Line[] ReadAk(Line head, List<Line> body, List<string> warnings)
     {
-        if (body.Length == 0) throw Error("AK block has no lines", head);
-        var result = new Nc1Line[body.Length];
-        for (int i = 0; i < body.Length; i++)
+        if (body.Count == 0) throw Error("AK block has no lines", head);
+        var result = new Nc1Line[body.Count];
+        for (int i = 0; i < body.Count; i++)
         {
             string[] tokens = Tokens(body[i]);
             if (i == 0)
@@ -163,10 +209,10 @@ internal static class Nc1Reader
         return result;
     }
 
-    private static Nc1Line[] ReadBo(Line[] body)
+    private static Nc1Line[] ReadBo(List<Line> body)
     {
-        var result = new Nc1Line[body.Length];
-        for (int i = 0; i < body.Length; i++)
+        var result = new Nc1Line[body.Count];
+        for (int i = 0; i < body.Count; i++)
         {
             string[] tokens = Tokens(body[i]);
             if (tokens.Length != 4 || !IsLabel(tokens[0])) throw Error("a BO line must hold a label letter and 3 numbers", body[i]);
