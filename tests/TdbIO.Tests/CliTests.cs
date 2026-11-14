@@ -53,6 +53,7 @@ public sealed class CliTests : IDisposable
     [InlineData("dump", "x")]
     [InlineData("info")]
     [InlineData("info", "")]
+    [InlineData("info", " ")]
     [InlineData("info", "a", "b")]
     [InlineData("info", "a", "--json", "--json")]
     [InlineData("info", "a", "--xml")]

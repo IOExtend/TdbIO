@@ -111,7 +111,7 @@ internal static class Cli
                 if (i + 1 == args.Length) throw new UsageException("Option '--encoding' needs a value.");
                 encodingName = args[++i];
             }
-            else if (arg.Length == 0) throw new UsageException("The file name is empty.");
+            else if (string.IsNullOrWhiteSpace(arg)) throw new UsageException("The file name is empty.");
             else if (arg[0] == '-') throw new UsageException($"Unknown option '{arg}' for '{name}'.");
             else if (path != null) throw new UsageException($"Unexpected argument '{arg}'.");
             else path = arg;
