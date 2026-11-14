@@ -152,7 +152,7 @@ See the [public API](docs/public-api.md) for every type and [dependencies](docs/
 
 ## Documentation
 
-The documentation site with the API reference is at <https://ioextend.github.io/TdbIO/>.
+The documentation site with the API reference is at <https://ioextend.github.io/TdbIO/>. [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/IOExtend/TdbIO) offers an automatically generated overview of the repository.
 
 ## Supported files
 
