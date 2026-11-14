@@ -82,6 +82,19 @@ public class TableRowDecoderTests
     }
 
     [Fact]
+    public void AssemblyRowWithInvalidUtf8SequenceThrowsInvalidDataException()
+    {
+        var row = MakeRow(AssemblyRow.ExpectedRowSize, span =>
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(span[0..], 10);
+            span[20] = 0xFF;
+        });
+
+        var e = Assert.Throws<InvalidDataException>(() => row.AsAssembly());
+        Assert.Equal(20, e.Offset);
+    }
+
+    [Fact]
     public void CoordsysRowDecodesCorrectly()
     {
         var row = MakeRow(CoordsysRow.ExpectedRowSize, span =>

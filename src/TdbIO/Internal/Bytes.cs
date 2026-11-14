@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Text;
 
 namespace TdbIO.Internal;
 
@@ -56,12 +57,21 @@ internal static class Bytes
         return new Guid(d.Slice((int)at, 16), bigEndian: true);
     }
 
+    private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+
     public static string AsciiString(ReadOnlySpan<byte> d, long at, int length)
     {
         Need(at, length, d.Length, "string");
         var span = d.Slice((int)at, length);
         int nul = span.IndexOf((byte)0);
         if (nul >= 0) span = span[..nul];
-        return System.Text.Encoding.UTF8.GetString(span);
+        try
+        {
+            return StrictUtf8.GetString(span);
+        }
+        catch (DecoderFallbackException e)
+        {
+            throw FormatError.At("invalid UTF-8 string", at + Math.Max(0, e.Index), e);
+        }
     }
 }
