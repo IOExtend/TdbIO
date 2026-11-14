@@ -58,7 +58,7 @@ internal static class TextSectionReader
             Bytes.Need(p, 1, span.Length, "text section");
             byte marker = span[p];
             if (marker == 0) break;
-            if (marker is not (0x04 or 0x0C)) throw FormatError.At($"text row marker 0x{marker:X2} is not 0x04 or 0x0C", p);
+            if (marker != 0x04) throw FormatError.At($"text row marker 0x{marker:X2} is not 0x04", p);
             Bytes.Need(p, RowLength, span.Length, "text row");
             rows.Add(ReadRow(span, p));
             p += RowLength;
