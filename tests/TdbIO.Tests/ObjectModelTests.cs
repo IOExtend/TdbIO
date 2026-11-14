@@ -613,6 +613,68 @@ public class ObjectModelTests
     }
 
     [Fact]
+    public void StringPoolReconstructsMultiByteUtf8WhenContinuationChunkPrecedesHeadChunk()
+    {
+        // Continuation chunk 302 appears FIRST in row order, but starts with UTF-8 continuation byte 0x94.
+        // Head chunk 301 appears SECOND, ending with 0xD0 (leading byte of 'Д').
+        var chunk1Bytes = new byte[29];
+        for (int i = 0; i < 28; i++) chunk1Bytes[i] = (byte)('A' + (i % 26));
+        chunk1Bytes[28] = 0xD0;
+
+        var spRowHead = MakeRow(StringPoolRow.ExpectedRowSize, span =>
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(span[0..], 301);  // Id = 301
+            BinaryPrimitives.WriteInt32LittleEndian(span[4..], 302);  // NextId = 302
+            chunk1Bytes.CopyTo(span[16..]);
+        });
+
+        var chunk2Bytes = new byte[29];
+        chunk2Bytes[0] = 0x94;
+        Encoding.UTF8.GetBytes("оска\0").CopyTo(chunk2Bytes.AsSpan(1));
+
+        var spRowCont = MakeRow(StringPoolRow.ExpectedRowSize, span =>
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(span[0..], 302);  // Id = 302
+            BinaryPrimitives.WriteInt32LittleEndian(span[4..], -1);   // NextId = -1 (terminating)
+            chunk2Bytes.CopyTo(span[16..]);
+        });
+
+        // Continuation row precedes head row in section
+        var spSec = MakeSection(StringPoolRow.ExpectedRowSize, StringPoolRow.TableKey, spRowCont, spRowHead);
+
+        var strDefRow = MakeRow(StrAttrAttrRow.ExpectedRowSize, span =>
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(span[0..], 10);
+            Encoding.UTF8.GetBytes("ATTR_NAME\0").CopyTo(span[8..]);
+            BinaryPrimitives.WriteInt32LittleEndian(span[112..], 301); // ValueId = 301 (head)
+        });
+        var strDefSec = MakeSection(StrAttrAttrRow.ExpectedRowSize, StrAttrAttrRow.TableKey, strDefRow);
+
+        var strAttrRow = MakeRow(StrAttrRow.ExpectedRowSize, span =>
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(span[0..], 1);
+            BinaryPrimitives.WriteInt32LittleEndian(span[4..], 10);
+            BinaryPrimitives.WriteInt32LittleEndian(span[8..], 100);
+        });
+        var strAttrSec = MakeSection(StrAttrRow.ExpectedRowSize, StrAttrRow.TableKey, strAttrRow);
+
+        var objRow = MakeRow(ObjectRow.ExpectedRowSize, span =>
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(span[0..], 100);
+        });
+        var objSec = MakeSection(ObjectRow.ExpectedRowSize, ObjectRow.TableKey, objRow);
+
+        var doc = Db1Document.Create(Synthetic.Db1Payload([]));
+        var model = ModelBuilder.BuildFromSections(doc, [objSec, spSec, strDefSec, strAttrSec]);
+
+        var obj = model.FindObject(100);
+        Assert.NotNull(obj);
+        Assert.NotNull(obj.StringAttributes);
+        string expectedPrefix = new string([.. chunk1Bytes[..28].Select(b => (char)b)]);
+        Assert.Equal(expectedPrefix + "Доска", obj.StringAttributes["ATTR_NAME"]);
+    }
+
+    [Fact]
     public void StringPoolCycleThrowsInvalidDataException()
     {
         var spRow1 = MakeRow(StringPoolRow.ExpectedRowSize, span =>

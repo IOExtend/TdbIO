@@ -44,33 +44,30 @@ internal static class ModelBuilder
 
         // Follow string-pool NextId chain with cycle and missing-link detection
         var chunksById = new Dictionary<int, StringPoolRow>(strPoolRows.Count);
+        var childChunkIds = new HashSet<int>();
         foreach (var sp in strPoolRows)
+        {
             chunksById[sp.Id] = sp;
+            if (sp.NextId > 0) childChunkIds.Add(sp.NextId);
+        }
 
         var stringPool = new Dictionary<int, string>(strPoolRows.Count);
         var rawBuffer = new List<byte>(128);
-        var visited = new HashSet<int>();
-        var childChunkIds = new HashSet<int>();
-        foreach (var sp in strPoolRows)
-            if (sp.NextId > 0) childChunkIds.Add(sp.NextId);
-
+        var visitedInCurrentChain = new HashSet<int>();
         var allVisitedInAnyChain = new HashSet<int>();
 
-        foreach (var head in strPoolRows)
+        void TraverseChain(StringPoolRow head)
         {
-            if (childChunkIds.Contains(head.Id) && allVisitedInAnyChain.Contains(head.Id))
-                continue;
-
-            if (stringPool.ContainsKey(head.Id))
-                continue;
+            if (allVisitedInAnyChain.Contains(head.Id) && stringPool.ContainsKey(head.Id))
+                return;
 
             rawBuffer.Clear();
-            visited.Clear();
+            visitedInCurrentChain.Clear();
 
             int currId = head.Id;
             while (currId > 0)
             {
-                if (!visited.Add(currId))
+                if (!visitedInCurrentChain.Add(currId))
                     throw FormatError.At($"Cycle detected in string pool chain at id {currId}", 0);
 
                 allVisitedInAnyChain.Add(currId);
@@ -100,6 +97,20 @@ internal static class ModelBuilder
             {
                 throw FormatError.At("Invalid UTF-8 sequence in string pool chain", 0, e);
             }
+        }
+
+        // Pass 1: Traverse all actual chain heads (chunks not referenced as NextId by any chunk)
+        foreach (var sp in strPoolRows)
+        {
+            if (!childChunkIds.Contains(sp.Id))
+                TraverseChain(sp);
+        }
+
+        // Pass 2: Traverse any remaining unvisited chunks (e.g. to detect orphaned cycles)
+        foreach (var sp in strPoolRows)
+        {
+            if (!allVisitedInAnyChain.Contains(sp.Id))
+                TraverseChain(sp);
         }
 
         var points = new Dictionary<int, ModelPoint>(ptRows.Count);
