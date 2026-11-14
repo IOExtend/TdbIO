@@ -11,6 +11,8 @@
       href: dependencies.md
     - name: Private test fixtures
       href: test-fixtures.md
+    - name: Tekla Structures versions and format variations
+      href: versions.md
 - name: API reference
   href: api/
 - name: GitHub
