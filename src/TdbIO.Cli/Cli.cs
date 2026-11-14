@@ -69,14 +69,20 @@ internal static class Cli
 
             // Everything is read before anything is written, so an error never leaves half an output.
             var output = new StringWriter();
+            string? error = null;
             switch (command.Name)
             {
-                case "info": Info(output, doc, command.Json); break;
+                case "info": error = Info(output, doc, command.Json); break;
                 case "tables": Tables(output, doc, command.Json); break;
                 default: Text(output, doc, command.Json); break;
             }
             stdout.Write(output.ToString());
             foreach (string warning in doc.Warnings) stderr.WriteLine($"tdbio: warning: {warning}");
+            if (error != null)
+            {
+                stderr.WriteLine($"tdbio: {error}");
+                return ExitInput;
+            }
             return ExitOk;
         }
         catch (UsageException e)
@@ -136,26 +142,34 @@ internal static class Cli
         _ => throw new UsageException($"Unknown encoding '{name}'."),
     };
 
-    private static void Info(TextWriter w, TdbDocument doc, bool json)
+    private static string? Info(TextWriter w, TdbDocument doc, bool json)
     {
         var fields = new List<KeyValuePair<string, object?>>();
         void Add(string key, object? value) => fields.Add(new(key, value));
 
+        string? error = null;
         Add("kind", doc.Kind.ToString());
         switch (doc)
         {
             case Db1Document db1:
-                var sections = db1.ReadTextSections();
-                var chains = sections.SelectMany(s => s.Chains).ToList();
                 Add("version", db1.Version);
                 Add("modelGuid", db1.ModelGuid);
                 Add("idMapEntries", db1.IdMap?.Count);
                 Add("idMapField65", db1.IdMapField65 is uint field65 ? new Hex(field65) : null);
                 Add("idMapField73", db1.IdMapField73);
-                Add("textSections", sections.Count);
-                Add("textChains", chains.Count);
-                Add("saveStamps", chains.Count(c => c.IsSaveStamp));
-                Add("lastSavedAt", chains.Max(c => c.SavedAt));
+                try
+                {
+                    var sections = db1.ReadTextSections();
+                    var chains = sections.SelectMany(s => s.Chains).ToList();
+                    Add("textSections", sections.Count);
+                    Add("textChains", chains.Count);
+                    Add("saveStamps", chains.Count(c => c.IsSaveStamp));
+                    Add("lastSavedAt", chains.Max(c => c.SavedAt));
+                }
+                catch (InvalidDataException e)
+                {
+                    error = e.Message;
+                }
                 break;
             case Db2Document db2:
                 Add("version", db2.Version);
@@ -220,6 +234,7 @@ internal static class Cli
             Add("warnings", doc.Warnings.Count);
             Output.WriteFields(w, fields);
         }
+        return error;
     }
 
     private static void Tables(TextWriter w, TdbDocument doc, bool json)
