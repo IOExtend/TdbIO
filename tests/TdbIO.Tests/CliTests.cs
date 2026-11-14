@@ -82,6 +82,14 @@ public sealed class CliTests : IDisposable
         Assert.Equal("", stdout);
     }
 
+    [Fact]
+    public void EncodingOnAMalformedFileIsAUsageError()
+    {
+        var (exit, stdout, _) = Run("info", File("broken.db1", [0x1F, 0x8B, 0x08, 0x00]), "--encoding", "cp1251");
+        Assert.Equal(Cli.ExitUsage, exit);
+        Assert.Equal("", stdout);
+    }
+
     [Theory]
     [InlineData("--help")]
     [InlineData("-h")]

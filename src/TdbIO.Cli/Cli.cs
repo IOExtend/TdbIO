@@ -58,9 +58,14 @@ internal static class Cli
         try
         {
             Command command = Parse(args);
+            if (command.Encoding != null)
+            {
+                TdbFileKind kind = TdbFile.DetectKind(command.Path);
+                if (kind is not (TdbFileKind.Template or TdbFileKind.Report))
+                    throw new UsageException("Option '--encoding' applies to templates and reports only.");
+            }
+
             TdbDocument doc = TdbFile.Open(command.Path, new TdbReadOptions { TextEncoding = command.Encoding });
-            if (command.Encoding != null && doc is not (TemplateDocument or ReportDocument))
-                throw new UsageException("Option '--encoding' applies to templates and reports only.");
 
             // Everything is read before anything is written, so an error never leaves half an output.
             var output = new StringWriter();
