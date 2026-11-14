@@ -49,8 +49,7 @@ public sealed partial class Db1Document : TdbDocument
     internal static Db1Document Create(byte[] payload)
     {
         ArgumentNullException.ThrowIfNull(payload);
-        var (type, version, modelGuid) = XsteelHeader.Read(payload);
-        if (type != XsteelHeader.Db1Type) throw FormatError.At($"Xsteel file type 0x{type:X2} is not a model database", 6);
+        var (_, version, modelGuid) = XsteelHeader.Read(payload, XsteelHeader.Db1Type);
         var warnings = new List<string>();
         var idMap = IdMapReader.Read(payload, warnings);
         return new Db1Document(payload, version, modelGuid, idMap, warnings);

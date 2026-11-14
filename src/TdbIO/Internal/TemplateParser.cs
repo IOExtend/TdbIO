@@ -13,7 +13,6 @@ namespace TdbIO.Internal;
 internal sealed class TemplateParser
 {
     // Guards against hostile input, not properties of the format.
-    public const int MaxLength = 16 * 1024 * 1024;
     public const int MaxDepth = 64;
 
     private readonly string _text;
@@ -103,7 +102,7 @@ internal sealed class TemplateParser
                 throw Error("the file ends where a value is expected", token);
         }
         if (!Is(token, '(')) throw Error("a value expected", token);
-        if (depth >= MaxDepth) throw Error("tuples are nested deeper than the 64 limit", token);
+        if (depth > MaxDepth) throw Error("tuples are nested deeper than the 64 limit", token);
         var items = new List<TemplateValue>();
         while (true)
         {
