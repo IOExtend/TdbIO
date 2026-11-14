@@ -129,6 +129,8 @@ public class ModelObject
         NumericAttributes = numericAttributes ?? new Dictionary<string, double>();
     }
 
+    internal IReadOnlyDictionary<string, long>? NumericAttributeOffsets { get; init; }
+
     /// <summary>The unique integer identifier of the object (primary key in the database).</summary>
     public int Id { get; }
 
@@ -261,7 +263,8 @@ public sealed class ModelPart : ModelObject
         double length,
         ModelCoordsys? coordinateSystem,
         IReadOnlyDictionary<string, string>? stringAttributes = null,
-        IReadOnlyDictionary<string, double>? numericAttributes = null)
+        IReadOnlyDictionary<string, double>? numericAttributes = null,
+        long lengthOffset = 0)
         : base(id, guid, type, subtype, phase, parentId, assemblyId, stringAttributes, numericAttributes)
     {
         Name = name ?? string.Empty;
@@ -276,9 +279,12 @@ public sealed class ModelPart : ModelObject
         EndPoint = endPoint;
         Length = length;
         CoordinateSystem = coordinateSystem;
+        LengthOffset = lengthOffset;
         Bolts = Array.Empty<ModelBolt>();
         Welds = Array.Empty<ModelWeld>();
     }
+
+    internal long LengthOffset { get; init; }
 
     /// <summary>The part name (e.g. "BEAM", "COLUMN", "PLATE").</summary>
     public string Name { get; }
@@ -423,6 +429,8 @@ public sealed class ModelWeld : ModelObject
 /// <param name="Z">The Z coordinate in millimeters.</param>
 public readonly record struct ModelPoint(int Id, double X, double Y, double Z)
 {
+    internal long Offset { get; init; }
+
     /// <inheritdoc/>
     public override string ToString() => $"({X:F2}, {Y:F2}, {Z:F2})";
 }
@@ -435,6 +443,8 @@ public readonly record struct ModelPoint(int Id, double X, double Y, double Z)
 /// <param name="Length">Length or scale factor.</param>
 public readonly record struct ModelCoordsys(int Id, double X, double Y, double Z, double Length)
 {
+    internal long Offset { get; init; }
+
     /// <inheritdoc/>
     public override string ToString() => $"Origin=({X:F2}, {Y:F2}, {Z:F2}), Length={Length:F2}";
 }
@@ -458,6 +468,8 @@ public readonly record struct ModelBoltHole(
     int LongHoleType,
     double ShorteningLength)
 {
+    internal long Offset { get; init; }
+
     /// <inheritdoc/>
     public override string ToString() => $"Hole #{No} in Part #{PartId} Grip={Length:F1}";
 }

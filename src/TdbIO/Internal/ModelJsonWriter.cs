@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 
@@ -96,7 +97,7 @@ internal static class ModelJsonWriter
             writer.WriteNumber("positionNumber", p.PositionNumber);
             writer.WriteNumber("class", p.Class);
             writer.WriteString("finish", p.Finish);
-            WriteFiniteNumber(writer, "length", p.Length);
+            WriteFiniteNumber(writer, "length", p.Length, p.LengthOffset);
             writer.WriteNumber("phase", p.Phase);
 
             if (p.AssemblyId.HasValue) writer.WriteNumber("assemblyId", p.AssemblyId.Value);
@@ -115,10 +116,11 @@ internal static class ModelJsonWriter
                 var cs = p.CoordinateSystem.Value;
                 writer.WriteStartObject("coordinateSystem");
                 writer.WriteNumber("id", cs.Id);
-                WriteFiniteNumber(writer, "x", cs.X);
-                WriteFiniteNumber(writer, "y", cs.Y);
-                WriteFiniteNumber(writer, "z", cs.Z);
-                WriteFiniteNumber(writer, "length", cs.Length);
+                long csOff = cs.Offset;
+                WriteFiniteNumber(writer, "x", cs.X, csOff > 0 ? csOff + 8 : 0);
+                WriteFiniteNumber(writer, "y", cs.Y, csOff > 0 ? csOff + 16 : 0);
+                WriteFiniteNumber(writer, "z", cs.Z, csOff > 0 ? csOff + 24 : 0);
+                WriteFiniteNumber(writer, "length", cs.Length, csOff > 0 ? csOff + 32 : 0);
                 writer.WriteEndObject();
             }
             else writer.WriteNull("coordinateSystem");
@@ -165,11 +167,12 @@ internal static class ModelJsonWriter
                 writer.WriteStartObject();
                 writer.WriteNumber("no", h.No);
                 writer.WriteNumber("partId", h.PartId);
-                WriteFiniteNumber(writer, "pointZ", h.PointZ);
-                WriteFiniteNumber(writer, "length", h.Length);
+                long hOff = h.Offset;
+                WriteFiniteNumber(writer, "pointZ", h.PointZ, hOff > 0 ? hOff + 16 : 0);
+                WriteFiniteNumber(writer, "length", h.Length, hOff > 0 ? hOff + 24 : 0);
                 writer.WriteNumber("longHoleDir", h.LongHoleDir);
                 writer.WriteNumber("longHoleType", h.LongHoleType);
-                WriteFiniteNumber(writer, "shorteningLength", h.ShorteningLength);
+                WriteFiniteNumber(writer, "shorteningLength", h.ShorteningLength, hOff > 0 ? hOff + 40 : 0);
                 writer.WriteEndObject();
             }
             writer.WriteEndArray();
@@ -178,9 +181,10 @@ internal static class ModelJsonWriter
             foreach (var pos in b.Positions)
             {
                 writer.WriteStartObject();
-                WriteFiniteNumber(writer, "x", pos.X);
-                WriteFiniteNumber(writer, "y", pos.Y);
-                WriteFiniteNumber(writer, "z", pos.Z);
+                long posOff = pos.Offset;
+                WriteFiniteNumber(writer, "x", pos.X, posOff > 0 ? posOff + 8 : 0);
+                WriteFiniteNumber(writer, "y", pos.Y, posOff > 0 ? posOff + 16 : 0);
+                WriteFiniteNumber(writer, "z", pos.Z, posOff > 0 ? posOff + 24 : 0);
                 writer.WriteEndObject();
             }
             writer.WriteEndArray();
@@ -223,7 +227,7 @@ internal static class ModelJsonWriter
     private static void WriteFiniteNumber(Utf8JsonWriter writer, string propertyName, double value, long offset = 0)
     {
         if (!double.IsFinite(value))
-            throw FormatError.At($"Non-finite number {value} in '{propertyName}'", offset);
+            throw FormatError.At(string.Create(CultureInfo.InvariantCulture, $"Non-finite number {value} in '{propertyName}'"), offset);
         writer.WriteNumber(propertyName, value);
     }
 
@@ -231,9 +235,10 @@ internal static class ModelJsonWriter
     {
         writer.WriteStartObject(propertyName);
         writer.WriteNumber("id", pt.Id);
-        WriteFiniteNumber(writer, "x", pt.X);
-        WriteFiniteNumber(writer, "y", pt.Y);
-        WriteFiniteNumber(writer, "z", pt.Z);
+        long ptOff = pt.Offset;
+        WriteFiniteNumber(writer, "x", pt.X, ptOff > 0 ? ptOff + 8 : 0);
+        WriteFiniteNumber(writer, "y", pt.Y, ptOff > 0 ? ptOff + 16 : 0);
+        WriteFiniteNumber(writer, "z", pt.Z, ptOff > 0 ? ptOff + 24 : 0);
         writer.WriteEndObject();
     }
 
@@ -251,7 +256,10 @@ internal static class ModelJsonWriter
         {
             writer.WriteStartObject("numericAttributes");
             foreach (var (k, v) in obj.NumericAttributes)
-                WriteFiniteNumber(writer, k, v);
+            {
+                long offset = obj.NumericAttributeOffsets != null && obj.NumericAttributeOffsets.TryGetValue(k, out long off) ? off : 0;
+                WriteFiniteNumber(writer, k, v, offset);
+            }
             writer.WriteEndObject();
         }
     }

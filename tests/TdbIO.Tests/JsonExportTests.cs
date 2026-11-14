@@ -71,21 +71,25 @@ public class JsonExportTests
     public void NonFiniteLengthThrowsInvalidDataException()
     {
         var doc = Db1Document.Create(Synthetic.Db1Payload([]));
-        var part = new ModelPart(1, Guid.NewGuid(), 1, 0, 1, null, null, "BEAM", "HEA300", "S355", "B", 1, 1, 1, "", null, null, double.NaN, null);
+        var part = new ModelPart(1, Guid.NewGuid(), 1, 0, 1, null, null, "BEAM", "HEA300", "S355", "B", 1, 1, 1, "", null, null, double.NaN, null, lengthOffset: 0x12A);
         var model = new TeklaModel(doc, doc.ModelGuid, [], [part], [], [], [part]);
 
-        Assert.Throws<InvalidDataException>(() => model.ToJson());
+        var ex = Assert.Throws<InvalidDataException>(() => model.ToJson());
+        Assert.Equal(0x12A, (long)ex.Data["Offset"]!);
+        Assert.Contains("0x12A", ex.Message);
     }
 
     [Fact]
     public void NonFiniteCoordinatesThrowInvalidDataException()
     {
         var doc = Db1Document.Create(Synthetic.Db1Payload([]));
-        var pt = new ModelPoint(1, double.PositiveInfinity, 0, 0);
+        var pt = new ModelPoint(1, double.PositiveInfinity, 0, 0) { Offset = 0x100 };
         var part = new ModelPart(1, Guid.NewGuid(), 1, 0, 1, null, null, "BEAM", "HEA300", "S355", "B", 1, 1, 1, "", pt, null, 1000.0, null);
         var model = new TeklaModel(doc, doc.ModelGuid, [], [part], [], [], [part]);
 
-        Assert.Throws<InvalidDataException>(() => model.ToJson());
+        var ex = Assert.Throws<InvalidDataException>(() => model.ToJson());
+        Assert.Equal(0x108, (long)ex.Data["Offset"]!);
+        Assert.Contains("0x108", ex.Message);
     }
 
     [Fact]
@@ -93,9 +97,15 @@ public class JsonExportTests
     {
         var doc = Db1Document.Create(Synthetic.Db1Payload([]));
         var attrs = new Dictionary<string, double> { ["WEIGHT"] = double.NaN };
-        var part = new ModelPart(1, Guid.NewGuid(), 1, 0, 1, null, null, "BEAM", "HEA300", "S355", "B", 1, 1, 1, "", null, null, 1000.0, null, null, attrs);
+        var offsets = new Dictionary<string, long> { ["WEIGHT"] = 0x200 };
+        var part = new ModelPart(1, Guid.NewGuid(), 1, 0, 1, null, null, "BEAM", "HEA300", "S355", "B", 1, 1, 1, "", null, null, 1000.0, null, null, attrs)
+        {
+            NumericAttributeOffsets = offsets
+        };
         var model = new TeklaModel(doc, doc.ModelGuid, [], [part], [], [], [part]);
 
-        Assert.Throws<InvalidDataException>(() => model.ToJson());
+        var ex = Assert.Throws<InvalidDataException>(() => model.ToJson());
+        Assert.Equal(0x200, (long)ex.Data["Offset"]!);
+        Assert.Contains("0x200", ex.Message);
     }
 }

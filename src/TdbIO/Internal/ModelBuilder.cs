@@ -20,23 +20,23 @@ internal static class ModelBuilder
         // 1. Decoded active row collections (Marker == 0x0C excluded)
         var objRows = GetActiveRows(FindSection(sections, ObjectRow.TableKey, ObjectRow.ExpectedRowSize), ObjectRow.ExpectedRowSize, r => r.AsObject());
         var assRows = GetActiveRows(FindSection(sections, AssemblyRow.TableKey, AssemblyRow.ExpectedRowSize), AssemblyRow.ExpectedRowSize, r => r.AsAssembly());
-        var partRows = GetActiveRows(FindSection(sections, PartRow.TableKey, PartRow.ExpectedRowSize), PartRow.ExpectedRowSize, r => r.AsPart());
+        var partRows = GetActiveRows(FindSection(sections, PartRow.TableKey, PartRow.ExpectedRowSize), PartRow.ExpectedRowSize, r => (Row: r.AsPart(), Offset: r.Offset + 1));
         var boltRows = GetActiveRows(FindSection(sections, BoltRow.TableKey, BoltRow.ExpectedRowSize), BoltRow.ExpectedRowSize, r => r.AsBolt());
         var weldRows = GetActiveRows(FindSection(sections, WeldingRow.TableKey, WeldingRow.ExpectedRowSize), WeldingRow.ExpectedRowSize, r => r.AsWelding());
-        var ptRows = GetActiveRows(FindSection(sections, PointRow.TableKey, PointRow.ExpectedRowSize), PointRow.ExpectedRowSize, r => r.AsPoint());
-        var csysRows = GetActiveRows(FindSection(sections, CoordsysRow.TableKey, CoordsysRow.ExpectedRowSize), CoordsysRow.ExpectedRowSize, r => r.AsCoordsys());
+        var ptRows = GetActiveRows(FindSection(sections, PointRow.TableKey, PointRow.ExpectedRowSize), PointRow.ExpectedRowSize, r => (Row: r.AsPoint(), Offset: r.Offset + 1));
+        var csysRows = GetActiveRows(FindSection(sections, CoordsysRow.TableKey, CoordsysRow.ExpectedRowSize), CoordsysRow.ExpectedRowSize, r => (Row: r.AsCoordsys(), Offset: r.Offset + 1));
         var paRows = GetActiveRows(FindSection(sections, PartAttrRow.TableKey, PartAttrRow.ExpectedRowSize), PartAttrRow.ExpectedRowSize, r => r.AsPartAttr());
         var strPoolRows = GetActiveRows(FindSection(sections, StringPoolRow.TableKey, StringPoolRow.ExpectedRowSize), StringPoolRow.ExpectedRowSize, r => r.AsStringPool());
         var numAttrRows = GetActiveRows(FindSection(sections, NumAttrRow.TableKey, NumAttrRow.ExpectedRowSize), NumAttrRow.ExpectedRowSize, r => r.AsNumAttr());
         var strAttrRows = GetActiveRows(FindSection(sections, StrAttrRow.TableKey, StrAttrRow.ExpectedRowSize), StrAttrRow.ExpectedRowSize, r => r.AsStrAttr());
-        var numDefRows = GetActiveRows(FindSection(sections, NumAttrAttrRow.TableKey, NumAttrAttrRow.ExpectedRowSize), NumAttrAttrRow.ExpectedRowSize, r => r.AsNumAttrAttr());
+        var numDefRows = GetActiveRows(FindSection(sections, NumAttrAttrRow.TableKey, NumAttrAttrRow.ExpectedRowSize), NumAttrAttrRow.ExpectedRowSize, r => (Row: r.AsNumAttrAttr(), Offset: r.Offset + 1));
         var strDefRows = GetActiveRows(FindSection(sections, StrAttrAttrRow.TableKey, StrAttrAttrRow.ExpectedRowSize), StrAttrAttrRow.ExpectedRowSize, r => r.AsStrAttrAttr());
         var phaseRows = GetActiveRows(FindSection(sections, ObjectPhaseRow.TableKey, ObjectPhaseRow.ExpectedRowSize), ObjectPhaseRow.ExpectedRowSize, r => r.AsObjectPhase());
         var partNumRows = GetActiveRows(FindSection(sections, PartNumberingRow.TableKey, PartNumberingRow.ExpectedRowSize), PartNumberingRow.ExpectedRowSize, r => r.AsPartNumbering());
         var assNumRows = GetActiveRows(FindSection(sections, AssemblyNumberingRow.TableKey, AssemblyNumberingRow.ExpectedRowSize), AssemblyNumberingRow.ExpectedRowSize, r => r.AsAssemblyNumbering());
         var objNumRows = GetActiveRows(FindSection(sections, ObjectNumberingRow.TableKey, ObjectNumberingRow.ExpectedRowSize), ObjectNumberingRow.ExpectedRowSize, r => r.AsObjectNumbering());
-        var holeRows = GetActiveRows(FindSection(sections, BoltHoleRow.TableKey, BoltHoleRow.ExpectedRowSize), BoltHoleRow.ExpectedRowSize, r => r.AsBoltHole());
-        var boltPtRows = GetActiveRows(FindSection(sections, BoltHolePointsRow.TableKey, BoltHolePointsRow.ExpectedRowSize), BoltHolePointsRow.ExpectedRowSize, r => r.AsBoltHolePoints());
+        var holeRows = GetActiveRows(FindSection(sections, BoltHoleRow.TableKey, BoltHoleRow.ExpectedRowSize), BoltHoleRow.ExpectedRowSize, r => (Row: r.AsBoltHole(), Offset: r.Offset + 1));
+        var boltPtRows = GetActiveRows(FindSection(sections, BoltHolePointsRow.TableKey, BoltHolePointsRow.ExpectedRowSize), BoltHolePointsRow.ExpectedRowSize, r => (Row: r.AsBoltHolePoints(), Offset: r.Offset + 1));
 
         // 2. Primary lookups
         var objects = new Dictionary<int, ObjectRow>(objRows.Count);
@@ -114,10 +114,10 @@ internal static class ModelBuilder
         }
 
         var points = new Dictionary<int, ModelPoint>(ptRows.Count);
-        foreach (var pt in ptRows) points[pt.Id] = new ModelPoint(pt.Id, pt.X, pt.Y, pt.Z);
+        foreach (var (pt, offset) in ptRows) points[pt.Id] = new ModelPoint(pt.Id, pt.X, pt.Y, pt.Z) { Offset = offset };
 
         var coords = new Dictionary<int, ModelCoordsys>(csysRows.Count);
-        foreach (var cs in csysRows) coords[cs.Id] = new ModelCoordsys(cs.Id, cs.X, cs.Y, cs.Z, cs.Length);
+        foreach (var (cs, offset) in csysRows) coords[cs.Id] = new ModelCoordsys(cs.Id, cs.X, cs.Y, cs.Z, cs.Length) { Offset = offset };
 
         var partAttrs = new Dictionary<int, PartAttrRow>(paRows.Count);
         foreach (var pa in paRows) partAttrs[pa.Id] = pa;
@@ -135,10 +135,10 @@ internal static class ModelBuilder
         foreach (var on in objNumRows) objNumberIds[on.Id] = on.NumberId;
 
         // 3. User & System Attributes
-        var numDefs = new Dictionary<int, (string Name, double Value)>(numDefRows.Count);
-        foreach (var nd in numDefRows)
+        var numDefs = new Dictionary<int, (string Name, double Value, long Offset)>(numDefRows.Count);
+        foreach (var (nd, offset) in numDefRows)
             if (!string.IsNullOrEmpty(nd.Name))
-                numDefs[nd.Id] = (nd.Name, nd.Value);
+                numDefs[nd.Id] = (nd.Name, nd.Value, offset + 8);
 
         var strDefs = new Dictionary<int, (string Name, string Value)>(strDefRows.Count);
         foreach (var sd in strDefRows)
@@ -151,6 +151,7 @@ internal static class ModelBuilder
         }
 
         var numAttrsByObj = new Dictionary<int, Dictionary<string, double>>();
+        var numAttrOffsetsByObj = new Dictionary<int, Dictionary<string, long>>();
         foreach (var na in numAttrRows)
         {
             if (numDefs.TryGetValue(na.AttrId, out var def))
@@ -158,6 +159,10 @@ internal static class ModelBuilder
                 if (!numAttrsByObj.TryGetValue(na.FatherId, out var dict))
                     numAttrsByObj[na.FatherId] = dict = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
                 dict[def.Name] = def.Value;
+
+                if (!numAttrOffsetsByObj.TryGetValue(na.FatherId, out var offDict))
+                    numAttrOffsetsByObj[na.FatherId] = offDict = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+                offDict[def.Name] = def.Offset;
             }
         }
 
@@ -198,7 +203,10 @@ internal static class ModelBuilder
                 a.Type,
                 a.Class,
                 strAttrs,
-                numAttrs);
+                numAttrs)
+            {
+                NumericAttributeOffsets = numAttrOffsetsByObj.GetValueOrDefault(a.Id)
+            };
 
             assemblies.Add(assembly);
             assembliesById[a.Id] = assembly;
@@ -207,7 +215,7 @@ internal static class ModelBuilder
         // 5. Build Parts
         var parts = new List<ModelPart>(partRows.Count);
         var partsById = new Dictionary<int, ModelPart>(partRows.Count);
-        foreach (var p in partRows)
+        foreach (var (p, pBodyOffset) in partRows)
         {
             var obj = objects.GetValueOrDefault(p.Id);
             int phase = phases.GetValueOrDefault(p.Id);
@@ -256,7 +264,11 @@ internal static class ModelBuilder
                 p.Length,
                 csys,
                 strAttrs,
-                numAttrs);
+                numAttrs,
+                lengthOffset: pBodyOffset + 56)
+            {
+                NumericAttributeOffsets = numAttrOffsetsByObj.GetValueOrDefault(p.Id)
+            };
 
             parts.Add(part);
             partsById[p.Id] = part;
@@ -264,7 +276,7 @@ internal static class ModelBuilder
 
         // 6. Build Bolts and Bolt Holes
         var holesByBolt = new Dictionary<int, List<ModelBoltHole>>();
-        foreach (var h in holeRows)
+        foreach (var (h, offset) in holeRows)
         {
             if (!holesByBolt.TryGetValue(h.BoltId, out var list))
                 holesByBolt[h.BoltId] = list = new List<ModelBoltHole>();
@@ -278,16 +290,19 @@ internal static class ModelBuilder
                 h.Length,
                 h.LongHoleDir,
                 h.LongHoleType,
-                h.ShorteningLength));
+                h.ShorteningLength)
+            {
+                Offset = offset
+            });
         }
 
         var patternPtsByBolt = new Dictionary<int, List<ModelPoint>>();
-        foreach (var bp in boltPtRows)
+        foreach (var (bp, offset) in boltPtRows)
         {
             if (!patternPtsByBolt.TryGetValue(bp.BoltId, out var list))
                 patternPtsByBolt[bp.BoltId] = list = new List<ModelPoint>();
-            list.Add(new ModelPoint(0, bp.IntPoint1X, bp.IntPoint1Y, bp.IntPoint1Z));
-            list.Add(new ModelPoint(0, bp.IntPoint2X, bp.IntPoint2Y, bp.IntPoint2Z));
+            list.Add(new ModelPoint(0, bp.IntPoint1X, bp.IntPoint1Y, bp.IntPoint1Z) { Offset = offset });
+            list.Add(new ModelPoint(0, bp.IntPoint2X, bp.IntPoint2Y, bp.IntPoint2Z) { Offset = offset + 24 });
         }
 
         var bolts = new List<ModelBolt>(boltRows.Count);
@@ -316,7 +331,10 @@ internal static class ModelBuilder
                 holes,
                 positions,
                 strAttrs,
-                numAttrs);
+                numAttrs)
+            {
+                NumericAttributeOffsets = numAttrOffsetsByObj.GetValueOrDefault(b.Id)
+            };
 
             var connectedParts = new List<ModelPart>();
             foreach (var h in holes)
@@ -350,7 +368,10 @@ internal static class ModelBuilder
                 obj.AssemblyId > 0 ? obj.AssemblyId : null,
                 w.CommonAttrId,
                 strAttrs,
-                numAttrs);
+                numAttrs)
+            {
+                NumericAttributeOffsets = numAttrOffsetsByObj.GetValueOrDefault(w.Id)
+            };
 
             welds.Add(weld);
             weldsById[w.Id] = weld;
@@ -446,7 +467,10 @@ internal static class ModelBuilder
                     o.ParentId > 0 ? o.ParentId : null,
                     o.AssemblyId > 0 ? o.AssemblyId : null,
                     strAttrs,
-                    numAttrs);
+                    numAttrs)
+                {
+                    NumericAttributeOffsets = numAttrOffsetsByObj.GetValueOrDefault(o.Id)
+                };
                 genericObjectsById[o.Id] = genObj;
             }
         }
