@@ -315,9 +315,9 @@ public class Nc1Tests
         lines.Add("EN");
         byte[] data = Synthetic.Nc1(lines);
 
-        long before = GC.GetTotalAllocatedBytes(precise: true);
+        long before = GC.GetAllocatedBytesForCurrentThread();
         var e = Assert.Throws<InvalidDataException>(() => Read(data));
-        long allocated = GC.GetTotalAllocatedBytes(precise: true) - before;
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
         Assert.Contains("a BO line must hold a label letter and 3 numbers", e.Message);
         Assert.True(allocated < 500_000, $"Allocated {allocated} bytes, expected < 500 KB");
