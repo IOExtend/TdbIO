@@ -124,7 +124,7 @@ High-level connected object model produced by `Db1Document.ReadModel()`:
 
 | Type | Use |
 | --- | --- |
-| `TeklaModel` | Decoded object graph: `Document`, `ModelGuid`, `Assemblies`, `Parts`, `Bolts`, `Welds`, `Objects`. Fast lookup methods: `FindObject(id/guid)`, `FindPart(id)`, `FindAssembly(id)`, `FindBolt(id)`, `FindWeld(id)`. |
+| `TeklaModel` | Decoded object graph: `Document`, `ModelGuid`, `Assemblies`, `Parts`, `Bolts`, `Welds`, `Objects`. Fast lookup methods: `FindObject(id/guid)`, `FindPart(id)`, `FindAssembly(id)`, `FindBolt(id)`, `FindWeld(id)`. JSON serialization: `ToJson(indented)` and `WriteJson(stream/writer, indented)`. |
 | `ModelObject` | Base entity: `Id`, `Guid` (RFC 4122), `Type`, `Subtype`, `Phase`, `ParentId`, `AssemblyId`, `StringAttributes`, `NumericAttributes`, `GetStringAttribute(name)`, `GetNumericAttribute(name)`. |
 | `ModelAssembly` | Assembly / cast unit: `Name`, `Prefix`, `StartNumber`, `PositionNumber`, `AssemblyType`, `Class`, `MainPart`, `Secondaries`, `Parts`, `Bolts`, `Welds`. |
 | `ModelPart` | Structural part: `Name`, `Profile` (resolved with parameter strings), `Material`, `Prefix`, `StartNumber`, `PositionNumber`, `Class`, `Finish`, `Assembly`, `IsMainPart`, `StartPoint`, `EndPoint`, `Length`, `CoordinateSystem`, `Bolts`, `Welds`. |

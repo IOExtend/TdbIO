@@ -87,6 +87,20 @@ public sealed class TeklaModel
 
     /// <summary>Finds a weld by its integer identifier, or returns <c>null</c> if not found.</summary>
     public ModelWeld? FindWeld(int id) => _weldsById.GetValueOrDefault(id);
+
+    /// <summary>Serializes the decoded model to a JSON string.</summary>
+    /// <param name="indented">Whether to format the JSON with indentation.</param>
+    /// <returns>A JSON string representation of the model.</returns>
+    public string ToJson(bool indented = false) => Internal.ModelJsonWriter.ToJson(this, indented);
+
+    /// <summary>Writes the decoded model as JSON to a stream.</summary>
+    /// <param name="stream">The output stream.</param>
+    /// <param name="indented">Whether to format the JSON with indentation.</param>
+    public void WriteJson(Stream stream, bool indented = false) => Internal.ModelJsonWriter.Write(this, stream, indented);
+
+    /// <summary>Writes the decoded model as JSON using a <see cref="System.Text.Json.Utf8JsonWriter"/>.</summary>
+    /// <param name="writer">The UTF-8 JSON writer.</param>
+    public void WriteJson(System.Text.Json.Utf8JsonWriter writer) => Internal.ModelJsonWriter.Write(this, writer);
 }
 
 /// <summary>Base class for all entities in a Tekla Structures model.</summary>
@@ -114,6 +128,8 @@ public class ModelObject
         StringAttributes = stringAttributes ?? new Dictionary<string, string>();
         NumericAttributes = numericAttributes ?? new Dictionary<string, double>();
     }
+
+    internal IReadOnlyDictionary<string, long>? NumericAttributeOffsets { get; init; }
 
     /// <summary>The unique integer identifier of the object (primary key in the database).</summary>
     public int Id { get; }
@@ -247,7 +263,8 @@ public sealed class ModelPart : ModelObject
         double length,
         ModelCoordsys? coordinateSystem,
         IReadOnlyDictionary<string, string>? stringAttributes = null,
-        IReadOnlyDictionary<string, double>? numericAttributes = null)
+        IReadOnlyDictionary<string, double>? numericAttributes = null,
+        long lengthOffset = 0)
         : base(id, guid, type, subtype, phase, parentId, assemblyId, stringAttributes, numericAttributes)
     {
         Name = name ?? string.Empty;
@@ -262,9 +279,12 @@ public sealed class ModelPart : ModelObject
         EndPoint = endPoint;
         Length = length;
         CoordinateSystem = coordinateSystem;
+        LengthOffset = lengthOffset;
         Bolts = Array.Empty<ModelBolt>();
         Welds = Array.Empty<ModelWeld>();
     }
+
+    internal long LengthOffset { get; init; }
 
     /// <summary>The part name (e.g. "BEAM", "COLUMN", "PLATE").</summary>
     public string Name { get; }
@@ -409,6 +429,8 @@ public sealed class ModelWeld : ModelObject
 /// <param name="Z">The Z coordinate in millimeters.</param>
 public readonly record struct ModelPoint(int Id, double X, double Y, double Z)
 {
+    internal long Offset { get; init; }
+
     /// <inheritdoc/>
     public override string ToString() => $"({X:F2}, {Y:F2}, {Z:F2})";
 }
@@ -421,6 +443,8 @@ public readonly record struct ModelPoint(int Id, double X, double Y, double Z)
 /// <param name="Length">Length or scale factor.</param>
 public readonly record struct ModelCoordsys(int Id, double X, double Y, double Z, double Length)
 {
+    internal long Offset { get; init; }
+
     /// <inheritdoc/>
     public override string ToString() => $"Origin=({X:F2}, {Y:F2}, {Z:F2}), Length={Length:F2}";
 }
@@ -444,6 +468,8 @@ public readonly record struct ModelBoltHole(
     int LongHoleType,
     double ShorteningLength)
 {
+    internal long Offset { get; init; }
+
     /// <inheritdoc/>
     public override string ToString() => $"Hole #{No} in Part #{PartId} Grip={Length:F1}";
 }

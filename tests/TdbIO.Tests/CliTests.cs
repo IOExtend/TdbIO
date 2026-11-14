@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Text.Json;
 using TdbIO.CommandLine;
 using Xunit;
@@ -61,6 +62,9 @@ public sealed class CliTests : IDisposable
     [InlineData("info", "a", "--encoding", "utf-16")]
     [InlineData("info", "a", "--encoding", "ascii", "--encoding", "ascii")]
     [InlineData("tables", "a", "--encoding", "ascii")]
+    [InlineData("export")]
+    [InlineData("export", "a", "--indent", "--indent")]
+    [InlineData("export", "a", "--encoding", "ascii")]
     [InlineData("text", "-h")]
     [InlineData("--help", "x")]
     public void UsageErrorsExitOneWithTwoLines(params string[] args)
@@ -355,6 +359,58 @@ public sealed class CliTests : IDisposable
         Assert.Equal("9.99", json.RootElement.GetProperty("version").GetString());
         Assert.False(json.RootElement.TryGetProperty("textSections", out _));
         Assert.StartsWith("tdbio: ", Assert.Single(Lines(stderr)));
+    }
+
+    [Fact]
+    public void ExportOnDbvIsAnInputError() => AssertInputError("export", Dbv());
+
+    [Fact]
+    public void ExportOutputsJsonForDb1()
+    {
+        var (exit, stdout, stderr) = Run("export", Db1WithTables(), "--indent");
+        Assert.Equal(Cli.ExitOk, exit);
+        Assert.Equal("", stderr);
+        using var json = JsonDocument.Parse(stdout);
+        var root = json.RootElement;
+        Assert.True(root.TryGetProperty("modelGuid", out _));
+        Assert.True(root.TryGetProperty("assemblies", out _));
+        Assert.True(root.TryGetProperty("parts", out _));
+        Assert.True(root.TryGetProperty("counts", out _));
+    }
+
+    [Fact]
+    public void ExportOnModelWithNonFiniteNumberReturnsExitInput()
+    {
+        var partBytes = new byte[PartRow.ExpectedRowSize];
+        BinaryPrimitives.WriteInt32LittleEndian(partBytes.AsSpan(0), 101);
+        BinaryPrimitives.WriteDoubleLittleEndian(partBytes.AsSpan(56), double.NaN);
+
+        var objBytes = new byte[ObjectRow.ExpectedRowSize];
+        BinaryPrimitives.WriteInt32LittleEndian(objBytes.AsSpan(0), 101);
+        BinaryPrimitives.WriteInt32LittleEndian(objBytes.AsSpan(28), 1); // Type = 1 (Part)
+
+        byte[] unkeyedSec = Db1Section(null, 4, [1], (0x04, Counting(4), 1, 2));
+        byte[] objSec = Db1Section(ObjectRow.TableKey, ObjectRow.ExpectedRowSize, [1], (0x04, objBytes, 1, 2));
+        byte[] partSec = Db1Section(PartRow.TableKey, PartRow.ExpectedRowSize, [1], (0x04, partBytes, 1, 2));
+
+        string nanFile = File("nan.db1", Gzip(Db1TablesPayload(unkeyedSec, objSec, partSec)));
+
+        var (exit, stdout, stderr) = Run("export", nanFile);
+        Assert.Equal(Cli.ExitInput, exit);
+        Assert.Contains("Non-finite number NaN in 'length'", stderr);
+        Assert.Contains("0x152", stderr);
+
+        // Finite counterpart succeeds
+        var finitePartBytes = (byte[])partBytes.Clone();
+        BinaryPrimitives.WriteDoubleLittleEndian(finitePartBytes.AsSpan(56), 1000.0);
+        byte[] finitePartSec = Db1Section(PartRow.TableKey, PartRow.ExpectedRowSize, [1], (0x04, finitePartBytes, 1, 2));
+        string okFile = File("ok.db1", Gzip(Db1TablesPayload(unkeyedSec, objSec, finitePartSec)));
+
+        var (okExit, okStdout, okStderr) = Run("export", okFile);
+        Assert.Equal(Cli.ExitOk, okExit);
+        Assert.Empty(okStderr);
+        using var json = JsonDocument.Parse(okStdout);
+        Assert.Equal(1000.0, json.RootElement.GetProperty("parts")[0].GetProperty("length").GetDouble());
     }
 
     private static void AssertInputError(params string[] args)
