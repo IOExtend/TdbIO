@@ -32,8 +32,7 @@ public sealed class Db2Document : TdbDocument
     internal static Db2Document Create(byte[] payload)
     {
         ArgumentNullException.ThrowIfNull(payload);
-        var (type, version, modelGuid) = XsteelHeader.Read(payload);
-        if (type != XsteelHeader.Db2Type) throw FormatError.At($"Xsteel file type 0x{type:X2} is not a records file", 6);
+        var (_, version, modelGuid) = XsteelHeader.Read(payload, XsteelHeader.Db2Type);
         return new Db2Document(payload, version, modelGuid, Db2Reader.Read(payload));
     }
 }

@@ -9,14 +9,18 @@ internal static class XsteelHeader
     public const int Length = 49;
     public const byte Db1Type = 0x85;
     public const byte Db2Type = 0x80;
-    private const byte DrawingType = 0x20;
+    public const byte DrawingType = 0x20;
 
-    public static (byte Type, string Version, Guid ModelGuid) Read(ReadOnlySpan<byte> payload)
+    public static (byte Type, string Version, Guid ModelGuid) Read(ReadOnlySpan<byte> payload, byte expectedType = 0)
     {
         if (payload.Length < 7 || !payload.StartsWith("Xsteel"u8)) throw FormatError.At("not a model container", 0);
         byte type = payload[6];
         // Drawings share the magic but carry no model GUID; they are recognised, not read.
         if (type == DrawingType) throw new NotSupportedException("drawing files are recognised but not supported");
+        if (expectedType != 0 && type != expectedType)
+            throw FormatError.At(type is Db1Type or Db2Type
+                ? $"Xsteel file type 0x{type:X2} is not a {(expectedType == Db1Type ? "model database" : "records file")}"
+                : $"Xsteel file type 0x{type:X2} is not known", 6);
         if (type != Db1Type && type != Db2Type) throw FormatError.At($"Xsteel file type 0x{type:X2} is not known", 6);
         Bytes.Need(0, Length, payload.Length, "Xsteel header");
         if (payload[7] != (byte)' ') throw FormatError.At("not a model container: no space after the type", 7);

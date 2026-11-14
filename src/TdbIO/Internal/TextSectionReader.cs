@@ -24,11 +24,11 @@ internal static class TextSectionReader
 
     private static ReadOnlySpan<byte> Closer => [0x4F, 0x61, 0xBC, 0x00];
 
-    /// <summary>Every text section after the header, in file order.</summary>
+    /// <summary>Every text section in file order.</summary>
     public static IReadOnlyList<TextSection> ReadAll(ReadOnlyMemory<byte> payload)
     {
         var sections = new List<TextSection>();
-        int from = XsteelHeader.Length;
+        int from = 0;
         while (from < payload.Length)
         {
             int found = payload.Span[from..].IndexOf(Signature);
@@ -39,10 +39,6 @@ internal static class TextSectionReader
         }
         return sections;
     }
-
-    /// <summary>Reads the section whose signature lies at <paramref name="signatureOffset"/>. Offsets in errors are offsets
-    /// in <paramref name="data"/>.</summary>
-    public static TextSection ReadAt(ReadOnlyMemory<byte> data, int signatureOffset) => ReadAt(data, signatureOffset, out _);
 
     private static TextSection ReadAt(ReadOnlyMemory<byte> data, int signatureOffset, out int end)
     {
@@ -58,7 +54,7 @@ internal static class TextSectionReader
             Bytes.Need(p, 1, span.Length, "text section");
             byte marker = span[p];
             if (marker == 0) break;
-            if (marker is not (0x04 or 0x0C)) throw FormatError.At($"text row marker 0x{marker:X2} is not 0x04 or 0x0C", p);
+            if (marker != 0x04) throw FormatError.At($"text row marker 0x{marker:X2} is not 0x04", p);
             Bytes.Need(p, RowLength, span.Length, "text row");
             rows.Add(ReadRow(span, p));
             p += RowLength;
