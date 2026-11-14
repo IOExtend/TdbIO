@@ -502,7 +502,8 @@ public readonly record struct StrAttrAttrRow(int Id, int Type, string Name, stri
 /// <param name="HashId">Hash code of the string.</param>
 /// <param name="RefCount">Reference count.</param>
 /// <param name="Text">The text content of this chunk.</param>
-public readonly record struct StringPoolRow(int Id, int NextId, int HashId, int RefCount, string Text)
+/// <param name="RawBytes">The raw bytes of this chunk (up to 29 bytes).</param>
+public readonly record struct StringPoolRow(int Id, int NextId, int HashId, int RefCount, string Text, ReadOnlyMemory<byte> RawBytes = default)
 {
     /// <summary>The expected row body size in bytes: 45.</summary>
     public const int ExpectedRowSize = 45;
@@ -515,12 +516,23 @@ public readonly record struct StringPoolRow(int Id, int NextId, int HashId, int 
     {
         if (body.Length < ExpectedRowSize)
             throw new ArgumentException($"Row body length {body.Length} is smaller than expected size {ExpectedRowSize}.", nameof(body));
-        return new(
-            Bytes.I32(body, 0),
-            Bytes.I32(body, 4),
-            Bytes.I32(body, 8),
-            Bytes.I32(body, 12),
-            Bytes.AsciiString(body, 16, 29));
+        int id = Bytes.I32(body, 0);
+        int nextId = Bytes.I32(body, 4);
+        int hashId = Bytes.I32(body, 8);
+        int refCount = Bytes.I32(body, 12);
+        var rawChunk = body.Slice(16, 29).ToArray();
+        string text;
+        try
+        {
+            text = Bytes.AsciiString(body, 16, 29);
+        }
+        catch (InvalidDataException)
+        {
+            // A chunk in a chained string may split multi-byte UTF-8 sequences.
+            // ModelBuilder reconstructs the full string across all chunks.
+            text = string.Empty;
+        }
+        return new(id, nextId, hashId, refCount, text, rawChunk);
     }
 
     /// <summary>Decodes the body of <paramref name="row"/> into a <see cref="StringPoolRow"/>.</summary>

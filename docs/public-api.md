@@ -69,7 +69,7 @@ offset or line number. A warning never contains text from the file. Warnings are
 
 | Type | Use |
 | --- | --- |
-| `Db1Document` | A model database (`.db1`, `xslib.db1` and their `.bak` copies). `Version` (`d.dd`), `ModelGuid`, `IdMap` (entries in file order, or null), `IdMapField65` and `IdMapField73` (raw numbers, null when the id map is not read), `Payload` (the whole unpacked file; offsets refer to it). `ReadTextSections()` and `ReadTables()` read on request and build new lists on each call. |
+| `Db1Document` | A model database (`.db1`, `xslib.db1` and their `.bak` copies). `Version` (`d.dd`), `ModelGuid`, `IdMap` (entries in file order, or null), `IdMapField65` and `IdMapField73` (raw numbers, null when the id map is not read), `Payload` (the whole unpacked file; offsets refer to it). `ReadTextSections()` and `ReadTables()` read on request and build new lists on each call. `ReadModel()` decodes a connected, read-only object model graph (<see cref="TeklaModel"/>) of parts, assemblies, bolts, welds and attributes. |
 | `IdMapEntry` | `Sequence`, `Id` (GUID) and `Value` (raw, meaning not known). |
 | `TextSection` | A section of 54-byte text rows: `Offset`, `RowCount`, `Chains` (in the file order of their heads) and `OrphanRowIds` (rows that belong to no chain, reported instead of dropped). The links of all rows are checked, orphans included: a link to a missing id, a cycle or two rows linking to one row is an error. |
 | `TextChain` | One text: `HeadId`, `HeadTag` and `HeadField13` (raw), `RowIds` (chain order), `Text` (the bytes as stored, not decoded). `IsSaveStamp` is true when the text starts with `Save:`; `SavedAt` is its date and time, or null. `RevealSaveText()` returns the revealed bytes of a save stamp: fields separated by `;`. Fields after the date and time can hold names of people or machines; do not log them. |
@@ -117,6 +117,22 @@ Typed record structs decoded from the row bodies of the most common model databa
 | `BoltHoleRow` | 140 | 48 | `BoltId`, `No`, `PartId`, `PointZ`, `Length`, `LongHoleDir`, `LongHoleType`, `ShorteningLength`. |
 | `ObjectPhaseRow` | 141 | 8 | `ObjectId`, `PhaseNumber`. |
 | `BoltHolePointsRow` | 142 | 60 | `BoltId`, intermediate coordinates `IntPoint1X`, `IntPoint1Y`, `IntPoint1Z`, `IntPoint2X`, `IntPoint2Y`, `IntPoint2Z`, `NumHoles`. |
+
+## Object model: parts, assemblies, bolts and welds
+
+High-level connected object model produced by `Db1Document.ReadModel()`:
+
+| Type | Use |
+| --- | --- |
+| `TeklaModel` | Decoded object graph: `Document`, `ModelGuid`, `Assemblies`, `Parts`, `Bolts`, `Welds`, `Objects`. Fast lookup methods: `FindObject(id/guid)`, `FindPart(id)`, `FindAssembly(id)`, `FindBolt(id)`, `FindWeld(id)`. |
+| `ModelObject` | Base entity: `Id`, `Guid` (RFC 4122), `Type`, `Subtype`, `Phase`, `ParentId`, `AssemblyId`, `StringAttributes`, `NumericAttributes`, `GetStringAttribute(name)`, `GetNumericAttribute(name)`. |
+| `ModelAssembly` | Assembly / cast unit: `Name`, `Prefix`, `StartNumber`, `PositionNumber`, `AssemblyType`, `Class`, `MainPart`, `Secondaries`, `Parts`, `Bolts`, `Welds`. |
+| `ModelPart` | Structural part: `Name`, `Profile` (resolved with parameter strings), `Material`, `Prefix`, `StartNumber`, `PositionNumber`, `Class`, `Finish`, `Assembly`, `IsMainPart`, `StartPoint`, `EndPoint`, `Length`, `CoordinateSystem`, `Bolts`, `Welds`. |
+| `ModelBolt` | Bolt group: `FirstPoint`, `SecondPoint`, `ConnectedParts`, `Holes`, `Positions`, `Assembly`. |
+| `ModelWeld` | Structural weld: `CommonAttrId`, `Parent`, `Assembly`, `ConnectedParts`. |
+| `ModelPoint` | 3D coordinate point in millimeters: `Id`, `X`, `Y`, `Z`. |
+| `ModelCoordsys` | Local coordinate system origin and scale: `Id`, `X`, `Y`, `Z`, `Length`. |
+| `ModelBoltHole` | Bolt hole penetration: `No`, `PartId`, `Part`, `PointZ`, `Length`, `LongHoleDir`, `LongHoleType`, `ShorteningLength`. |
 
 ## Files next to the model
 
