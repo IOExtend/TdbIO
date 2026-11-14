@@ -144,8 +144,8 @@ switch (document)
 }
 ```
 
-A malformed file throws `InvalidDataException` with the byte offset of the problem in its message; a file that is
-recognised but not supported throws `NotSupportedException`. The library never writes to the console. Documents are
+A malformed file throws `InvalidDataException` with the byte offset of the problem in its message (for templates,
+a character offset in the decoded text); a file that is recognised but not supported throws `NotSupportedException`. The library never writes to the console. Documents are
 read-only and hold the unpacked file in memory; table rows are a view over it, so large tables cost no memory per row.
 
 See the [public API](docs/public-api.md) for every type and [dependencies](docs/dependencies.md) for package details.
