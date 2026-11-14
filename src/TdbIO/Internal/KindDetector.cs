@@ -14,9 +14,9 @@ internal static class KindDetector
             if (head.Length < 7) return TdbFileKind.Unknown;
             return head[6] switch
             {
-                0x85 => TdbFileKind.Db1,
-                0x80 => TdbFileKind.Db2,
-                0x20 => TdbFileKind.Drawing,
+                XsteelHeader.Db1Type => TdbFileKind.Db1,
+                XsteelHeader.Db2Type => TdbFileKind.Db2,
+                XsteelHeader.DrawingType => TdbFileKind.Drawing,
                 _ => TdbFileKind.Unknown,
             };
         }

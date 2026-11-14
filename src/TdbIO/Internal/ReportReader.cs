@@ -3,9 +3,6 @@ namespace TdbIO.Internal;
 /// <summary>Splits a report into lines on CR LF and pages on a leading form feed.</summary>
 internal static class ReportReader
 {
-    // Guards against hostile input, not a property of the format.
-    public const int MaxLength = 16 * 1024 * 1024;
-
     public static (IReadOnlyList<string> Lines, IReadOnlyList<int> PageStarts, bool EndsWithLineBreak) Read(string text)
     {
         var lines = new List<string>();

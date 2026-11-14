@@ -23,8 +23,8 @@ public sealed class TemplateDocument : TdbDocument
 
     internal static TemplateDocument Create(byte[] data, Encoding? forced)
     {
-        if (data.Length > TemplateParser.MaxLength)
-            throw FormatError.At("template is larger than the 16 MiB limit", TemplateParser.MaxLength);
+        if (data.Length > TdbFile.TextMaxLength)
+            throw FormatError.At("template is larger than the 16 MiB limit", TdbFile.TextMaxLength);
         string text = TextDecoding.Decode(data, forced, out string encodingName);
         return new TemplateDocument(encodingName, TemplateParser.Parse(text));
     }

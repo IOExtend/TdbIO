@@ -32,8 +32,8 @@ public sealed class ReportDocument : TdbDocument
 
     internal static ReportDocument Create(byte[] data, Encoding? forced)
     {
-        if (data.Length > ReportReader.MaxLength)
-            throw FormatError.At("report is larger than the 16 MiB limit", ReportReader.MaxLength);
+        if (data.Length > TdbFile.TextMaxLength)
+            throw FormatError.At("report is larger than the 16 MiB limit", TdbFile.TextMaxLength);
         string text = TextDecoding.Decode(data, forced, out string encodingName);
         var (lines, pageStarts, endsWithLineBreak) = ReportReader.Read(text);
         return new ReportDocument(encodingName, lines, pageStarts, endsWithLineBreak);

@@ -7,8 +7,6 @@ namespace TdbIO.Internal;
 /// each start with a line of two upper-case letters, ending with an empty <c>EN</c> block.</summary>
 internal static class Nc1Reader
 {
-    // Guards against hostile input, not a property of the format.
-    public const int MaxFileLength = 16 * 1024 * 1024;
     public const int MaxLineLength = 4096;
 
     // Lines 1 to 26: the code ST, the comment, 20 fields and 4 empty lines. Line 27 is the next block code.
@@ -20,8 +18,8 @@ internal static class Nc1Reader
 
     public static Nc1Document Read(ReadOnlySpan<byte> data, List<string> warnings)
     {
-        if (data.Length > MaxFileLength)
-            throw FormatError.At("DSTV file is larger than the 16 MiB limit", MaxFileLength);
+        if (data.Length > TdbFile.TextMaxLength)
+            throw FormatError.At("DSTV file is larger than the 16 MiB limit", TdbFile.TextMaxLength);
         if (!FirstLineIsSt(data)) throw FormatError.At("not a DSTV file: line 1 is not ST", 0, 1);
 
         var lines = SplitLines(data);
