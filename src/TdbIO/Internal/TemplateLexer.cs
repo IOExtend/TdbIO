@@ -19,9 +19,8 @@ internal readonly record struct Token(TokenKind Kind, string Text, int Offset);
 /// any other character outside a string is an error.</summary>
 internal static class TemplateLexer
 {
-    public static IReadOnlyList<Token> Lex(string text)
+    public static IEnumerable<Token> Lex(string text)
     {
-        var tokens = new List<Token>();
         int i = 0;
         while (i < text.Length)
         {
@@ -34,21 +33,21 @@ internal static class TemplateLexer
             else if (char.IsAsciiLetter(c) || c == '_')
             {
                 while (++i < text.Length && (char.IsAsciiLetterOrDigit(text[i]) || text[i] == '_')) { }
-                tokens.Add(new(TokenKind.Identifier, text[start..i], start));
+                yield return new(TokenKind.Identifier, text[start..i], start);
             }
             else if (c == '-' || char.IsAsciiDigit(c))
             {
                 i = Number(text, i);
-                tokens.Add(new(TokenKind.Number, text[start..i], start));
+                yield return new(TokenKind.Number, text[start..i], start);
             }
             else if (c == '"')
             {
                 (string value, i) = QuotedString(text, i);
-                tokens.Add(new(TokenKind.String, value, start));
+                yield return new(TokenKind.String, value, start);
             }
             else if (c is '{' or '}' or '(' or ')' or ';' or '=' or ',')
             {
-                tokens.Add(new(TokenKind.Punctuation, c.ToString(), start));
+                yield return new(TokenKind.Punctuation, c.ToString(), start);
                 i++;
             }
             else
@@ -56,8 +55,7 @@ internal static class TemplateLexer
                 throw Error($"character U+{(int)c:X4} is not allowed outside a string", text, i);
             }
         }
-        tokens.Add(new(TokenKind.End, "", text.Length));
-        return tokens;
+        yield return new(TokenKind.End, "", text.Length);
     }
 
     // -?\d+(\.\d+)? ; returns the offset after the number.

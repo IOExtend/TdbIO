@@ -10,35 +10,49 @@ namespace TdbIO.Internal;
 /// value    := STRING | NUMBER | IDENT | "(" value { "," value } ")"
 /// </code>
 /// </summary>
-internal sealed class TemplateParser
+internal sealed class TemplateParser : IDisposable
 {
     // Guards against hostile input, not properties of the format.
     public const int MaxDepth = 64;
 
     private readonly string _text;
-    private readonly IReadOnlyList<Token> _tokens;
-    private int _at;
+    private readonly IEnumerator<Token> _tokens;
+    private Token _current;
+    private Token _next;
 
     private TemplateParser(string text)
     {
         _text = text;
-        _tokens = TemplateLexer.Lex(text);
+        _tokens = TemplateLexer.Lex(text).GetEnumerator();
+        _current = _tokens.MoveNext() ? _tokens.Current : new Token(TokenKind.End, "", text.Length);
+        _next = _tokens.MoveNext() ? _tokens.Current : new Token(TokenKind.End, "", text.Length);
     }
+
+    public void Dispose() => _tokens.Dispose();
 
     public static TemplateBlock Parse(string text)
     {
-        var parser = new TemplateParser(text);
+        using var parser = new TemplateParser(text);
         var root = parser.Block(0);
         if (parser.Peek(0).Kind != TokenKind.End) throw parser.Error("only blanks may follow the root block", parser.Peek(0));
         return root;
     }
 
-    private Token Peek(int ahead) => _tokens[Math.Min(_at + ahead, _tokens.Count - 1)];
+    private Token Peek(int ahead) => ahead switch
+    {
+        0 => _current,
+        1 => _next,
+        _ => throw new ArgumentOutOfRangeException(nameof(ahead)),
+    };
 
     private Token Next()
     {
-        Token token = Peek(0);
-        if (token.Kind != TokenKind.End) _at++;
+        Token token = _current;
+        if (token.Kind != TokenKind.End)
+        {
+            _current = _next;
+            _next = _tokens.MoveNext() ? _tokens.Current : new Token(TokenKind.End, "", _text.Length);
+        }
         return token;
     }
 
@@ -70,7 +84,8 @@ internal sealed class TemplateParser
             if (token.Kind != TokenKind.Identifier) throw Error("a key, a block or '}' expected", token);
             if (Is(Peek(1), '='))
             {
-                _at += 2;
+                Next();
+                Next();
                 properties.Add(new(token.Text, Value(0)));
                 Expect(';');
             }
