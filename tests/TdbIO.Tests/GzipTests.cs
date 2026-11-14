@@ -149,6 +149,16 @@ public class GzipTests
     }
 
     [Fact]
+    public void LargeForgedIsizeWithCorruptDataDoesNotAllocateLargeBuffer()
+    {
+        byte[] file = Synthetic.Concat([0x1F, 0x8B, 0x08, 0x00, 0, 0, 0, 0, 0, 0], [0xFF, 0xFF, 0xFF], Synthetic.Le32(0u), Synthetic.Le32(64u * 1024 * 1024));
+        long before = GC.GetTotalAllocatedBytes(precise: true);
+        Rejects(file);
+        long allocated = GC.GetTotalAllocatedBytes(precise: true) - before;
+        Assert.True(allocated < 4 * 1024 * 1024, $"Allocated {allocated} bytes, expected < 4 MiB");
+    }
+
+    [Fact]
     public void PeekInflatesTheHeadOfCutData()
     {
         byte[] file = Synthetic.Gzip(Payload);
