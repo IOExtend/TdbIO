@@ -659,6 +659,67 @@ public sealed class CliTests : IDisposable
         Assert.False(System.IO.File.Exists(htmlPath));
     }
 
+    [Fact]
+    public void Export_AcceptsFiniteCustomProfileWithSubstringsAcrossAllRenderers()
+    {
+        var objBytes = new byte[ObjectRow.ExpectedRowSize];
+        BinaryPrimitives.WriteInt32LittleEndian(objBytes.AsSpan(0), 101);
+        BinaryPrimitives.WriteInt32LittleEndian(objBytes.AsSpan(28), 1);
+
+        var pointBytes1 = new byte[PointRow.ExpectedRowSize];
+        BinaryPrimitives.WriteInt32LittleEndian(pointBytes1.AsSpan(0), 201);
+        var pointBytes2 = new byte[PointRow.ExpectedRowSize];
+        BinaryPrimitives.WriteInt32LittleEndian(pointBytes2.AsSpan(0), 202);
+        BinaryPrimitives.WriteDoubleLittleEndian(pointBytes2.AsSpan(8), 6000.0);
+
+        var partAttrBytes = new byte[PartAttrRow.ExpectedRowSize];
+        BinaryPrimitives.WriteInt32LittleEndian(partAttrBytes.AsSpan(0), 501);
+        Encoding.ASCII.GetBytes("CUSTOM_NANO200").CopyTo(partAttrBytes.AsSpan(116));
+
+        var partBytes = new byte[PartRow.ExpectedRowSize];
+        BinaryPrimitives.WriteInt32LittleEndian(partBytes.AsSpan(0), 101);
+        BinaryPrimitives.WriteInt32LittleEndian(partBytes.AsSpan(4), 501);
+        BinaryPrimitives.WriteInt32LittleEndian(partBytes.AsSpan(12), 201);
+        BinaryPrimitives.WriteInt32LittleEndian(partBytes.AsSpan(16), 202);
+        BinaryPrimitives.WriteDoubleLittleEndian(partBytes.AsSpan(56), 6000.0);
+
+        byte[] unkeyedSec = Db1Section(null, 4, [1], (0x04, Counting(4), 1, 2));
+        byte[] objSec = Db1Section(ObjectRow.TableKey, ObjectRow.ExpectedRowSize, [1], (0x04, objBytes, 1, 2));
+        byte[] ptSec = Db1Section(PointRow.TableKey, PointRow.ExpectedRowSize, [1, 1],
+            (0x04, pointBytes1, 1, 2),
+            (0x04, pointBytes2, 2, 3));
+        byte[] paSec = Db1Section(PartAttrRow.TableKey, PartAttrRow.ExpectedRowSize, [1], (0x04, partAttrBytes, 1, 2));
+        byte[] partSec = Db1Section(PartRow.TableKey, PartRow.ExpectedRowSize, [1], (0x04, partBytes, 1, 2));
+
+        string nanoFile = File("custom_nano.db1", Gzip(Db1TablesPayload(unkeyedSec, objSec, ptSec, paSec, partSec)));
+
+        // 1. Plain object JSON export succeeds
+        var (jsonExit, jsonOut, jsonErr) = Run("export", nanoFile);
+        Assert.Equal(Cli.ExitOk, jsonExit);
+        Assert.Empty(jsonErr);
+        Assert.Contains("CUSTOM_NANO200", jsonOut);
+
+        // 2. IFC export succeeds
+        var (ifcExit, ifcOut, ifcErr) = Run("export", nanoFile, "--ifc");
+        Assert.Equal(Cli.ExitOk, ifcExit);
+        Assert.Empty(ifcErr);
+        Assert.Contains("CUSTOM_NANO200", ifcOut);
+
+        // 3. Scene JSON export succeeds
+        var (sceneExit, sceneOut, sceneErr) = Run("export", nanoFile, "--scene-json");
+        Assert.Equal(Cli.ExitOk, sceneExit);
+        Assert.Empty(sceneErr);
+        Assert.Contains("CUSTOM_NANO200", sceneOut);
+
+        // 4. HTML viewer export succeeds
+        string htmlPath = Path.Combine(_folder, "custom_nano.html");
+        var (htmlExit, _, htmlErr) = Run("export", nanoFile, htmlPath);
+        Assert.Equal(Cli.ExitOk, htmlExit);
+        Assert.Empty(htmlErr);
+        Assert.True(System.IO.File.Exists(htmlPath));
+        Assert.Contains("CUSTOM_NANO200", System.IO.File.ReadAllText(htmlPath));
+    }
+
     private static void AssertInputError(params string[] args)
     {
         var (exit, stdout, stderr) = Run(args);

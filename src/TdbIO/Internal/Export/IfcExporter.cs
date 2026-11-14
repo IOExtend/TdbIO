@@ -437,25 +437,18 @@ internal static class IfcExporter
                 var parts = p[2..].Split(['*', 'x', 'X']);
                 if (parts.Length >= 2)
                 {
-                    if (double.TryParse(parts[0], CultureInfo.InvariantCulture, out double t) &&
-                        double.TryParse(parts[1], CultureInfo.InvariantCulture, out double w))
-                    {
-                        if (!double.IsFinite(t) || !double.IsFinite(w))
-                        {
-                            throw new InvalidDataException(string.Create(CultureInfo.InvariantCulture, $"Non-finite dimension in profile '{profile}'."));
-                        }
-                        if (t > 0 && w > 0)
-                        {
-                            heightMm = t;
-                            widthMm = w;
-                        }
-                    }
-                    else if (parts[0].Contains("NAN", StringComparison.OrdinalIgnoreCase) ||
-                             parts[1].Contains("NAN", StringComparison.OrdinalIgnoreCase) ||
-                             parts[0].Contains("INFINITY", StringComparison.OrdinalIgnoreCase) ||
-                             parts[1].Contains("INFINITY", StringComparison.OrdinalIgnoreCase))
+                    bool parsedT = double.TryParse(parts[0], CultureInfo.InvariantCulture, out double t);
+                    bool parsedW = double.TryParse(parts[1], CultureInfo.InvariantCulture, out double w);
+
+                    if ((parsedT && !double.IsFinite(t)) || (parsedW && !double.IsFinite(w)))
                     {
                         throw new InvalidDataException(string.Create(CultureInfo.InvariantCulture, $"Non-finite dimension in profile '{profile}'."));
+                    }
+
+                    if (parsedT && parsedW && t > 0 && w > 0)
+                    {
+                        heightMm = t;
+                        widthMm = w;
                     }
                 }
             }
