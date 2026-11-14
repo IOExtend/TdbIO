@@ -160,9 +160,9 @@ public class TemplateTests
     [Fact]
     public void DeeplyNestedTuplesAreRejected()
     {
-        string text = "template { a = " + new string('(', 65) + "1" + new string(')', 65) + "; };";
-        Throws(text, 15 + 64, 1);
-        Assert.NotNull(Parse("template { a = " + new string('(', 64) + "1" + new string(')', 64) + "; };"));
+        string text = "template { a = " + new string('(', 66) + "1" + new string(')', 66) + "; };";
+        Throws(text, 15 + 65, 1);
+        Assert.NotNull(Parse("template { a = " + new string('(', 65) + "1" + new string(')', 65) + "; };"));
     }
 
     [Fact]

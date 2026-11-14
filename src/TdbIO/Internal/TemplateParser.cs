@@ -103,7 +103,7 @@ internal sealed class TemplateParser
                 throw Error("the file ends where a value is expected", token);
         }
         if (!Is(token, '(')) throw Error("a value expected", token);
-        if (depth >= MaxDepth) throw Error("tuples are nested deeper than the 64 limit", token);
+        if (depth > MaxDepth) throw Error("tuples are nested deeper than the 64 limit", token);
         var items = new List<TemplateValue>();
         while (true)
         {
