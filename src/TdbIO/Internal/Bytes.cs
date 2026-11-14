@@ -37,4 +37,31 @@ internal static class Bytes
         Need(at, 4, d.Length, "u32");
         return BinaryPrimitives.ReadUInt32BigEndian(d[(int)at..]);
     }
+
+    public static double F64(ReadOnlySpan<byte> d, long at)
+    {
+        Need(at, 8, d.Length, "f64");
+        return BinaryPrimitives.ReadDoubleLittleEndian(d[(int)at..]);
+    }
+
+    public static float F32(ReadOnlySpan<byte> d, long at)
+    {
+        Need(at, 4, d.Length, "f32");
+        return BinaryPrimitives.ReadSingleLittleEndian(d[(int)at..]);
+    }
+
+    public static Guid Guid(ReadOnlySpan<byte> d, long at)
+    {
+        Need(at, 16, d.Length, "guid");
+        return new Guid(d.Slice((int)at, 16), bigEndian: true);
+    }
+
+    public static string AsciiString(ReadOnlySpan<byte> d, long at, int length)
+    {
+        Need(at, length, d.Length, "string");
+        var span = d.Slice((int)at, length);
+        int nul = span.IndexOf((byte)0);
+        if (nul >= 0) span = span[..nul];
+        return System.Text.Encoding.UTF8.GetString(span);
+    }
 }
