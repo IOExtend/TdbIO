@@ -29,6 +29,24 @@ public sealed class DbvDocument : TdbDocument
     /// <summary>The name stored after the signature, printable ASCII.</summary>
     public string Name { get; }
 
+    /// <summary>The domain identifier of the database (from <see cref="Prologue"/> word 1: 2 for options, 3 for environment, 4 for analysis).</summary>
+    public uint DomainId => Prologue[1];
+
+    /// <summary>The generation/version number of the domain file (from <see cref="ListHeader"/> word 3), equals <c>GuidRecords.Count + 1</c>.</summary>
+    public uint Generation => ListHeader[3];
+
+    /// <summary>The base byte offset of domain events (alias for <see cref="B"/>).</summary>
+    public uint BaseOffset => B;
+
+    /// <summary>The domain event level (alias for <see cref="C"/>; expected to be 5).</summary>
+    public uint EventLevel => C;
+
+    /// <summary>The current byte offset after domain events (from <see cref="T"/> word 1; equals <c>BaseOffset + 32 * L1.Count</c>).</summary>
+    public uint CurrentOffset => T[1];
+
+    /// <summary>The byte offset of the last domain event (from <see cref="T"/> word 4; equals <c>CurrentOffset - 32</c>).</summary>
+    public uint LastEventOffset => T[4];
+
     /// <summary>The six raw numbers after the name.</summary>
     public IReadOnlyList<uint> Prologue { get; }
 
