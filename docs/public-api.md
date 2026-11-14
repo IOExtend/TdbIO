@@ -80,8 +80,8 @@ offset or line number. A warning never contains text from the file. Warnings are
 
 | Type | Use |
 | --- | --- |
-| `TableSection` | A section of fixed-size rows, from `Db1Document.ReadTables()` or `DbvDocument.Sections`. `Ordinal`, `Offset`, `End`, `Key` (raw, `.db1` only, else null), `RowSize`, `Descriptors` (raw), `RowsOffset` and `Rows`. Sections have no names; tell them apart by `Ordinal` and `RowSize`. `Rows` is a view over the data: a row is built when it is read. |
-| `TableRow` | `Offset` (of the marker byte), `Marker`, `Body` (`RowSize` raw bytes), `A` and `B` (the two numbers after the body: signed 32-bit in `.db1` files, unsigned in DBV@ files). |
+| `TableSection` | A section of fixed-size rows, from `Db1Document.ReadTables()` or `DbvDocument.Sections`. `Ordinal`, `Offset`, `End`, `Key` (schema table number in `.db1`, else null), `RowSize`, `Descriptors` (primary and secondary index specifications), `RowsOffset` and `Rows`. `Rows` is a view over the data: a row is built when it is read. |
+| `TableRow` | `Offset` (of the marker byte), `Marker` (0x04 active, 0x0C deleted/superseded in `.db1`), `Body` (`RowSize` raw bytes), `A` / `CreationTimeId` (creation transaction TimeId) and `B` / `DeletionTimeId` (deletion or superseding transaction TimeId). `IsActive` and `IsDeleted` inspect the marker. |
 | `DbvDocument` | A DBV@ file: `Name`, `Prologue`, `ListHeader`, `GuidRecords`, `B`, `C`, `L1`, `L2`, `T`, `C9Records`, `Sections` and `Payload`. The numbers are raw; their names are positions, not meanings. |
 | `DbvGuidRecord` | `Value` (raw), `Index` (1-based, checked against the position) and `Id`. |
 | `DbvC9Record` | A record that starts with `C9 C0 CE DB`: four raw numbers `R0` to `R3`. |
