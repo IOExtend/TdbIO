@@ -66,4 +66,36 @@ public class JsonExportTests
             Assert.Equal(model.Welds.Count, welds.GetArrayLength());
         }
     }
+
+    [Fact]
+    public void NonFiniteLengthThrowsInvalidDataException()
+    {
+        var doc = Db1Document.Create(Synthetic.Db1Payload([]));
+        var part = new ModelPart(1, Guid.NewGuid(), 1, 0, 1, null, null, "BEAM", "HEA300", "S355", "B", 1, 1, 1, "", null, null, double.NaN, null);
+        var model = new TeklaModel(doc, doc.ModelGuid, [], [part], [], [], [part]);
+
+        Assert.Throws<InvalidDataException>(() => model.ToJson());
+    }
+
+    [Fact]
+    public void NonFiniteCoordinatesThrowInvalidDataException()
+    {
+        var doc = Db1Document.Create(Synthetic.Db1Payload([]));
+        var pt = new ModelPoint(1, double.PositiveInfinity, 0, 0);
+        var part = new ModelPart(1, Guid.NewGuid(), 1, 0, 1, null, null, "BEAM", "HEA300", "S355", "B", 1, 1, 1, "", pt, null, 1000.0, null);
+        var model = new TeklaModel(doc, doc.ModelGuid, [], [part], [], [], [part]);
+
+        Assert.Throws<InvalidDataException>(() => model.ToJson());
+    }
+
+    [Fact]
+    public void NonFiniteNumericAttributeThrowsInvalidDataException()
+    {
+        var doc = Db1Document.Create(Synthetic.Db1Payload([]));
+        var attrs = new Dictionary<string, double> { ["WEIGHT"] = double.NaN };
+        var part = new ModelPart(1, Guid.NewGuid(), 1, 0, 1, null, null, "BEAM", "HEA300", "S355", "B", 1, 1, 1, "", null, null, 1000.0, null, null, attrs);
+        var model = new TeklaModel(doc, doc.ModelGuid, [], [part], [], [], [part]);
+
+        Assert.Throws<InvalidDataException>(() => model.ToJson());
+    }
 }

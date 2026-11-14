@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Text.Json;
 using TdbIO.CommandLine;
 using Xunit;
@@ -335,6 +336,24 @@ public sealed class CliTests : IDisposable
         Assert.True(root.TryGetProperty("assemblies", out _));
         Assert.True(root.TryGetProperty("parts", out _));
         Assert.True(root.TryGetProperty("counts", out _));
+    }
+
+    [Fact]
+    public void ExportOnModelWithNonFiniteNumberReturnsExitInput()
+    {
+        var partBytes = new byte[PartRow.ExpectedRowSize];
+        BinaryPrimitives.WriteInt32LittleEndian(partBytes.AsSpan(0), 101);
+        BinaryPrimitives.WriteDoubleLittleEndian(partBytes.AsSpan(32), double.NaN);
+
+        var objBytes = new byte[ObjectRow.ExpectedRowSize];
+        BinaryPrimitives.WriteInt32LittleEndian(objBytes.AsSpan(0), 101);
+        BinaryPrimitives.WriteInt32LittleEndian(objBytes.AsSpan(28), 1);
+
+        string file = File("nan.db1", Gzip(Db1TablesPayload(
+            Db1Section(ObjectRow.TableKey, ObjectRow.ExpectedRowSize, [1], (0x04, objBytes, 1, 2)),
+            Db1Section(PartRow.TableKey, PartRow.ExpectedRowSize, [1], (0x04, partBytes, 1, 2)))));
+
+        AssertInputError("export", file);
     }
 
     private static void AssertInputError(params string[] args)
