@@ -5,10 +5,10 @@ namespace TdbIO.Tests;
 
 public class TextSectionTests
 {
-    private static TextSection Read(IEnumerable<byte[]> rows) => TextSectionReader.ReadAt(Synthetic.TextSectionBytes(rows), 0);
+    private static TextSection Read(IEnumerable<byte[]> rows) => Assert.Single(TextSectionReader.ReadAll(Synthetic.TextSectionBytes(rows)));
 
     private static InvalidDataException Fails(IEnumerable<byte[]> rows) =>
-        Assert.Throws<InvalidDataException>(() => TextSectionReader.ReadAt(Synthetic.TextSectionBytes(rows), 0));
+        Assert.Throws<InvalidDataException>(() => TextSectionReader.ReadAll(Synthetic.TextSectionBytes(rows)));
 
     private static string Text(TextChain chain) => System.Text.Encoding.ASCII.GetString(chain.Text.Span);
 
@@ -140,10 +140,10 @@ public class TextSectionTests
     {
         var bytes = Synthetic.TextSectionBytes([Synthetic.TextRow(1, 0, 1, [])]);
         bytes[^1] = 0x01;
-        Assert.Equal(36 + 54 + 1, Assert.Throws<InvalidDataException>(() => TextSectionReader.ReadAt(bytes, 0)).Offset);
+        Assert.Equal(36 + 54 + 1, Assert.Throws<InvalidDataException>(() => TextSectionReader.ReadAll(bytes)).Offset);
 
         var cut = Synthetic.TextSectionBytes([Synthetic.TextRow(1, 0, 1, [])])[..^4];
-        Assert.Throws<InvalidDataException>(() => TextSectionReader.ReadAt(cut, 0));
+        Assert.Throws<InvalidDataException>(() => TextSectionReader.ReadAll(cut));
 
         var marker = Fails([Synthetic.TextRow(1, 0, 1, [], marker: 0x05)]);
         Assert.Equal(36, marker.Offset);
@@ -154,11 +154,11 @@ public class TextSectionTests
 
     [Fact]
     public void RowsWithoutEndThrow() =>
-        Assert.Throws<InvalidDataException>(() => TextSectionReader.ReadAt(Synthetic.Concat(Synthetic.TextSectionSignature, Synthetic.TextRow(1, 0, 1, [])), 0));
+        Assert.Throws<InvalidDataException>(() => TextSectionReader.ReadAll(Synthetic.Concat(Synthetic.TextSectionSignature, Synthetic.TextRow(1, 0, 1, []))));
 
     [Fact]
-    public void NoSignatureThrows() =>
-        Assert.Equal(4, Assert.Throws<InvalidDataException>(() => TextSectionReader.ReadAt(new byte[64], 4)).Offset);
+    public void NoSignatureFindsNoSections() =>
+        Assert.Empty(TextSectionReader.ReadAll(new byte[64]));
 
     [Fact]
     public void DocumentFindsEverySectionAndSaveStamps()

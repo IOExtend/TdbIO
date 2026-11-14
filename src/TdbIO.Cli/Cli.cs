@@ -81,7 +81,7 @@ internal static class Cli
             return ExitUsage;
         }
         catch (Exception e) when (e is WrongKindException or InvalidDataException or NotSupportedException or IOException
-                                      or UnauthorizedAccessException or DecoderFallbackException)
+                                      or UnauthorizedAccessException)
         {
             stderr.WriteLine($"tdbio: {e.Message}");
             return ExitInput;
