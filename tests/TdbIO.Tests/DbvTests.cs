@@ -31,10 +31,16 @@ public class DbvTests
         Assert.Equal(new DbvGuidRecord(100, 1, new Guid("03020100-0504-0706-0809-0a0b0c0d0e0f")), doc.GuidRecords[0]);
         Assert.Equal(new DbvGuidRecord(1, 2, new Guid("43424140-4544-4746-4849-4a4b4c4d4e4f")), doc.GuidRecords[1]);
         Assert.Equal(0x400u, doc.B);
+        Assert.Equal(0x400u, doc.BaseOffset);
         Assert.Equal(5u, doc.C);
+        Assert.Equal(5u, doc.EventLevel);
+        Assert.Equal(7u, doc.DomainId);
+        Assert.Equal(3u, doc.Generation);
         Assert.Equal(new uint[] { 1, 2 }, doc.L1);
         Assert.Equal(new[] { 32, -32 }, doc.L2);
         Assert.Equal(new uint[] { 3, 0x440, 0, 0, 0x420, 2 }, doc.T);
+        Assert.Equal(0x440u, doc.CurrentOffset);
+        Assert.Equal(0x420u, doc.LastEventOffset);
         Assert.Equal(new[] { new DbvC9Record(0, 1, 0, -1), new DbvC9Record(0, 1, 0, -1) }, doc.C9Records);
         Assert.Empty(doc.Sections);
         Assert.Equal(data, doc.Payload.ToArray());
@@ -220,6 +226,8 @@ public class DbvTests
     [InlineData("A2")]
     [InlineData("C")]
     [InlineData("T1")]
+    [InlineData("T2")]
+    [InlineData("T3")]
     [InlineData("T4")]
     [InlineData("R")]
     [InlineData("RowType")]
@@ -236,6 +244,8 @@ public class DbvTests
             case "A2": parts.ListHeader = [0, 1, 14, 3]; break;
             case "C": parts.C = 6; break;
             case "T1": parts.T = [3, 0x500, 0, 0, 0x4E0, 2]; break;
+            case "T2": parts.T = [3, 0x440, 1, 0, 0x420, 2]; break;
+            case "T3": parts.T = [3, 0x440, 0, 1, 0x420, 2]; break;
             case "T4": parts.T = [3, 0x440, 0, 0, 0x400, 2]; break;
             case "R": parts.C9[0] = (0xDBCEC0C9, [0, 1, 0, -2]); break;
             case "RowType": parts.Sections = [DbvSection(1, [1], (3, [0], 0x401, 0x401))]; break;

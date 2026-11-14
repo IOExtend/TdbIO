@@ -75,6 +75,8 @@ internal static class DbvReader
         if (t[0] != listHeader[3])
             throw FormatError.At(Invariant($"DBV@ word T[0] = {t[0]} differs from the record count word A[3] = {listHeader[3]}"), p);
         Expect(warnings, t[1] == b + 32L * listLength, "word T[1]", p + 4);
+        Expect(warnings, t[2] == 0, "word T[2]", p + 8);
+        Expect(warnings, t[3] == 0, "word T[3]", p + 12);
         Expect(warnings, t[4] == t[1] - 32L, "word T[4]", p + 16);
         p += 24;
 

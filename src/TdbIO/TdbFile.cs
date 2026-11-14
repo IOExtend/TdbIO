@@ -9,7 +9,7 @@ public static class TdbFile
     private const int HeadLength = 64 * 1024;
 
     // The size limit of .nc1, .tpl, .rpt and .xsr files.
-    private const int TextMaxLength = 16 * 1024 * 1024;
+    internal const int TextMaxLength = 16 * 1024 * 1024;
 
     /// <summary>Tells the kind of a file from its first bytes (at most 64 KiB) and, for reports, its file name. Never throws
     /// for the content: data that is short, cut or not recognised gives <see cref="TdbFileKind.Unknown"/>.</summary>
@@ -99,8 +99,6 @@ public static class TdbFile
                 TdbFileKind.IdRanges => IdRangeDocument.Create(payload),
                 TdbFileKind.GuidMapper => GuidMapperDocument.Create(payload),
                 TdbFileKind.Dbv => DbvDocument.Create(payload),
-                _ when payload.AsSpan().StartsWith("Xsteel"u8) && payload.Length > 6 =>
-                    throw FormatError.At($"Xsteel file type 0x{payload[6]:X2} is not known", 6),
                 _ => throw NotRecognised(),
             };
         }

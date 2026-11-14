@@ -61,21 +61,32 @@ internal static class Cli
         try
         {
             Command command = Parse(args);
+            if (command.Encoding != null)
+            {
+                TdbFileKind kind = TdbFile.DetectKind(command.Path);
+                if (kind is not (TdbFileKind.Template or TdbFileKind.Report))
+                    throw new UsageException("Option '--encoding' applies to templates and reports only.");
+            }
+
             TdbDocument doc = TdbFile.Open(command.Path, new TdbReadOptions { TextEncoding = command.Encoding });
-            if (command.Encoding != null && doc is not (TemplateDocument or ReportDocument))
-                throw new UsageException("Option '--encoding' applies to templates and reports only.");
 
             // Everything is read before anything is written, so an error never leaves half an output.
             var output = new StringWriter();
+            string? error = null;
             switch (command.Name)
             {
-                case "info": Info(output, doc, command.Json); break;
+                case "info": error = Info(output, doc, command.Json); break;
                 case "tables": Tables(output, doc, command.Json); break;
                 case "export": Export(output, doc, command.Indent); break;
                 default: Text(output, doc, command.Json); break;
             }
             stdout.Write(output.ToString());
             foreach (string warning in doc.Warnings) stderr.WriteLine($"tdbio: warning: {warning}");
+            if (error != null)
+            {
+                stderr.WriteLine($"tdbio: {error}");
+                return ExitInput;
+            }
             return ExitOk;
         }
         catch (UsageException e)
@@ -85,7 +96,7 @@ internal static class Cli
             return ExitUsage;
         }
         catch (Exception e) when (e is WrongKindException or InvalidDataException or NotSupportedException or IOException
-                                      or UnauthorizedAccessException or DecoderFallbackException)
+                                      or UnauthorizedAccessException)
         {
             stderr.WriteLine($"tdbio: {e.Message}");
             return ExitInput;
@@ -121,7 +132,7 @@ internal static class Cli
                 if (i + 1 == args.Length) throw new UsageException("Option '--encoding' needs a value.");
                 encodingName = args[++i];
             }
-            else if (arg.Length == 0) throw new UsageException("The file name is empty.");
+            else if (string.IsNullOrWhiteSpace(arg)) throw new UsageException("The file name is empty.");
             else if (arg[0] == '-') throw new UsageException($"Unknown option '{arg}' for '{name}'.");
             else if (path != null) throw new UsageException($"Unexpected argument '{arg}'.");
             else path = arg;
@@ -141,26 +152,34 @@ internal static class Cli
         _ => throw new UsageException($"Unknown encoding '{name}'."),
     };
 
-    private static void Info(TextWriter w, TdbDocument doc, bool json)
+    private static string? Info(TextWriter w, TdbDocument doc, bool json)
     {
         var fields = new List<KeyValuePair<string, object?>>();
         void Add(string key, object? value) => fields.Add(new(key, value));
 
+        string? error = null;
         Add("kind", doc.Kind.ToString());
         switch (doc)
         {
             case Db1Document db1:
-                var sections = db1.ReadTextSections();
-                var chains = sections.SelectMany(s => s.Chains).ToList();
                 Add("version", db1.Version);
                 Add("modelGuid", db1.ModelGuid);
                 Add("idMapEntries", db1.IdMap?.Count);
                 Add("idMapField65", db1.IdMapField65 is uint field65 ? new Hex(field65) : null);
                 Add("idMapField73", db1.IdMapField73);
-                Add("textSections", sections.Count);
-                Add("textChains", chains.Count);
-                Add("saveStamps", chains.Count(c => c.IsSaveStamp));
-                Add("lastSavedAt", chains.Max(c => c.SavedAt));
+                try
+                {
+                    var sections = db1.ReadTextSections();
+                    var chains = sections.SelectMany(s => s.Chains).ToList();
+                    Add("textSections", sections.Count);
+                    Add("textChains", chains.Count);
+                    Add("saveStamps", chains.Count(c => c.IsSaveStamp));
+                    Add("lastSavedAt", chains.Max(c => c.SavedAt));
+                }
+                catch (InvalidDataException e)
+                {
+                    error = e.Message;
+                }
                 break;
             case Db2Document db2:
                 Add("version", db2.Version);
@@ -225,6 +244,7 @@ internal static class Cli
             Add("warnings", doc.Warnings.Count);
             Output.WriteFields(w, fields);
         }
+        return error;
     }
 
     private static void Tables(TextWriter w, TdbDocument doc, bool json)

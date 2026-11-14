@@ -54,6 +54,7 @@ public sealed class CliTests : IDisposable
     [InlineData("dump", "x")]
     [InlineData("info")]
     [InlineData("info", "")]
+    [InlineData("info", " ")]
     [InlineData("info", "a", "b")]
     [InlineData("info", "a", "--json", "--json")]
     [InlineData("info", "a", "--xml")]
@@ -81,6 +82,14 @@ public sealed class CliTests : IDisposable
     public void EncodingOnAModelFileIsAUsageError()
     {
         var (exit, stdout, _) = Run("info", Db1WithText(), "--encoding", "cp1251");
+        Assert.Equal(Cli.ExitUsage, exit);
+        Assert.Equal("", stdout);
+    }
+
+    [Fact]
+    public void EncodingOnAMalformedFileIsAUsageError()
+    {
+        var (exit, stdout, _) = Run("info", File("broken.db1", [0x1F, 0x8B, 0x08, 0x00]), "--encoding", "cp1251");
         Assert.Equal(Cli.ExitUsage, exit);
         Assert.Equal("", stdout);
     }
@@ -320,6 +329,37 @@ public sealed class CliTests : IDisposable
     [Fact]
     public void BrokenTablesAreAnInputErrorWithNoOutput() =>
         AssertInputError("tables", File("m.db1", Gzip(Concat(XsteelHead(), IdMapBody([])))));
+
+    [Fact]
+    public void BrokenTextSectionInInfoPrintsHeaderAndReportsError()
+    {
+        var brokenText = Concat(TextSectionSignature, TextRow(1, 9, 1, []), [0], TextSectionCloser);
+        byte[] payload = Concat(XsteelHead(), IdMapBody([]), brokenText);
+        string file = File("broken_text.db1", Gzip(payload));
+        var (exit, stdout, stderr) = Run("info", file);
+        Assert.Equal(Cli.ExitInput, exit);
+        var f = Fields(stdout);
+        Assert.Equal("Db1", f["kind"]);
+        Assert.Equal("9.99", f["version"]);
+        Assert.Equal("0", f["idMapEntries"]);
+        Assert.False(f.ContainsKey("textSections"));
+        Assert.StartsWith("tdbio: ", Assert.Single(Lines(stderr)));
+    }
+
+    [Fact]
+    public void BrokenTextSectionInJsonInfoPrintsHeaderAndReportsError()
+    {
+        var brokenText = Concat(TextSectionSignature, TextRow(1, 9, 1, []), [0], TextSectionCloser);
+        byte[] payload = Concat(XsteelHead(), IdMapBody([]), brokenText);
+        string file = File("broken_text_json.db1", Gzip(payload));
+        var (exit, stdout, stderr) = Run("info", file, "--json");
+        Assert.Equal(Cli.ExitInput, exit);
+        using var json = JsonDocument.Parse(stdout);
+        Assert.Equal("Db1", json.RootElement.GetProperty("kind").GetString());
+        Assert.Equal("9.99", json.RootElement.GetProperty("version").GetString());
+        Assert.False(json.RootElement.TryGetProperty("textSections", out _));
+        Assert.StartsWith("tdbio: ", Assert.Single(Lines(stderr)));
+    }
 
     [Fact]
     public void ExportOnDbvIsAnInputError() => AssertInputError("export", Dbv());
