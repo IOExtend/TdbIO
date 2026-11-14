@@ -145,11 +145,13 @@ public class TextSectionTests
         var cut = Synthetic.TextSectionBytes([Synthetic.TextRow(1, 0, 1, [])])[..^4];
         Assert.Throws<InvalidDataException>(() => TextSectionReader.ReadAt(cut, 0));
 
-        var marker = Fails([Synthetic.TextRow(1, 0, 1, [], marker: 0x05)]);
-        Assert.Equal(36, marker.Offset);
-        Assert.Contains("0x05", marker.Message);
+        var marker05 = Fails([Synthetic.TextRow(1, 0, 1, [], marker: 0x05)]);
+        Assert.Equal(36, marker05.Offset);
+        Assert.Contains("0x05", marker05.Message);
 
-        Assert.Single(Read([Synthetic.TextRow(1, 0, 1, [], marker: 0x0C)]).Chains);
+        var marker0C = Fails([Synthetic.TextRow(1, 0, 1, [], marker: 0x0C)]);
+        Assert.Equal(36, marker0C.Offset);
+        Assert.Contains("0x0C", marker0C.Message);
     }
 
     [Fact]
