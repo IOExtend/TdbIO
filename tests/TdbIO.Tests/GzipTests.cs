@@ -161,9 +161,12 @@ public class GzipTests
     [Fact]
     public void PeekInflatesTheHeadOfCutData()
     {
-        byte[] file = Synthetic.Gzip(Payload);
+        // Deterministic uncompressed deflate block (BFINAL=0, BTYPE=00) of 32 bytes,
+        // ensuring the cut prefix inflates across all platforms without depending on platform-specific compression trees.
+        byte[] uncompressedBlock = [0x00, 0x20, 0x00, 0xDF, 0xFF];
+        byte[] file = Synthetic.Concat([0x1F, 0x8B, 0x08, 0x00, 0, 0, 0, 0, 0, 0], uncompressedBlock, Payload[..32], [0x00]);
         var into = new byte[32];
-        Assert.Equal(32, Gzip.Peek(file.AsSpan(0, file.Length / 2), into));
+        Assert.Equal(32, Gzip.Peek(file, into));
         Assert.Equal(Payload[..32], into);
     }
 
