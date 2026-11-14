@@ -24,11 +24,11 @@ internal static class TextSectionReader
 
     private static ReadOnlySpan<byte> Closer => [0x4F, 0x61, 0xBC, 0x00];
 
-    /// <summary>Every text section after the header, in file order.</summary>
+    /// <summary>Every text section in file order.</summary>
     public static IReadOnlyList<TextSection> ReadAll(ReadOnlyMemory<byte> payload)
     {
         var sections = new List<TextSection>();
-        int from = XsteelHeader.Length;
+        int from = 0;
         while (from < payload.Length)
         {
             int found = payload.Span[from..].IndexOf(Signature);
@@ -39,10 +39,6 @@ internal static class TextSectionReader
         }
         return sections;
     }
-
-    /// <summary>Reads the section whose signature lies at <paramref name="signatureOffset"/>. Offsets in errors are offsets
-    /// in <paramref name="data"/>.</summary>
-    public static TextSection ReadAt(ReadOnlyMemory<byte> data, int signatureOffset) => ReadAt(data, signatureOffset, out _);
 
     private static TextSection ReadAt(ReadOnlyMemory<byte> data, int signatureOffset, out int end)
     {

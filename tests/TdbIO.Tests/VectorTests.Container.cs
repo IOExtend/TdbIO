@@ -153,7 +153,7 @@ public partial class VectorTests
             ["rows_offset_in_vector", "row_length", "rows", "row_markers", "ids_in_file_order", "chains", "head_id", "head_tag",
              "chain_ids", "text_length", "text_sha256", "text_prefix", "starts_with_Save", "terminator_offset_in_vector"], []);
         int rowsOffset = x.GetProperty("rows_offset_in_vector").GetInt32();
-        var section = TextSectionReader.ReadAt(bytes, rowsOffset - TextSectionReader.SignatureLength);
+        var section = Assert.Single(TextSectionReader.ReadAll(bytes));
         int rows = x.GetProperty("rows").GetInt32();
         Assert.Equal(rows, section.RowCount);
         Assert.Equal(TextSectionReader.RowLength, x.GetProperty("row_length").GetInt32());
