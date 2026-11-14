@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>TdbIO.Scene.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="IOViewer" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\TdbIO\TdbIO.csproj" />
+    <ProjectReference Include="..\..\src\TdbIO.Scene\TdbIO.Scene.csproj" />
+    <ProjectReference Include="..\..\src\TdbIO.Cli\TdbIO.Cli.csproj" />
+    <Compile Include="..\TdbIO.Tests\Synthetic.cs" Link="Synthetic.cs" />
+    <Compile Include="..\TdbIO.Tests\Synthetic.Container.cs" Link="Synthetic.Container.cs" />
+  </ItemGroup>
+
+</Project>

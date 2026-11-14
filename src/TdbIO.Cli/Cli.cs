@@ -1,5 +1,9 @@
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
+using IOScene;
+using IOViewer.Exporters;
+using TdbIO.Scene;
 
 namespace TdbIO.CommandLine;
 
@@ -15,19 +19,27 @@ internal static class Cli
         Usage: tdbio info <file> [--json] [--encoding ascii|utf-8|cp1251|cp1252]
                tdbio tables <file> [--json]
                tdbio text <file> [--json]
-               tdbio export <file> [--indent]
+               tdbio export <file> [output] [--indent] [--scene-json] [--ifc] [--html]
                tdbio --help | -h | --version
 
         Commands:
           info      The kind of the file and its main values.
           tables    The table sections of a model database (.db1) or a DBV@ file, one line each.
           text      The text chains of a model database (.db1), one line each. Save stamps show only their date.
-          export    Decodes the object model of a model database (.db1) and writes it as JSON.
+          export    Decodes the object model of a model database (.db1) and writes it as JSON, IFC, or 3D HTML viewer.
+
+        Arguments:
+          <file>    Path to input file (.db1, .db2, DBV@, etc.).
+          [output]  Destination path for exported file (.json, .ifc, or .html).
+                    If omitted, JSON is written to stdout.
 
         Options:
-          --json      Write one JSON object instead of text.
-          --indent    Format the JSON output with indentation (export only).
-          --encoding  The encoding of a template or report, instead of detecting it (info only).
+          --json        Write one JSON object instead of text (info, tables, text).
+          --indent      Format the JSON output with indentation (export only).
+          --scene-json  Export as IOScene neutral scene JSON instead of Tekla object model JSON.
+          --ifc         Force export format to IFC STEP physical file.
+          --html        Force export format to standalone interactive 3D WebGL HTML viewer.
+          --encoding    The encoding of a template or report, instead of detecting it (info only).
 
         Warnings go to stderr and do not change the exit code.
         Exit codes: 0 done, 1 usage error, 2 input error (missing, malformed or unsupported file).
@@ -37,7 +49,16 @@ internal static class Cli
     private static readonly string[] TextColumns = ["section", "headId", "rows", "length", "stamp", "savedAt", "text"];
     private static readonly string[] OrphanColumns = ["section", "id"];
 
-    private sealed record Command(string Name, string Path, bool Json, bool Indent, Encoding? Encoding);
+    private sealed record Command(
+        string Name,
+        string Path,
+        string? OutputPath,
+        bool Json,
+        bool Indent,
+        bool SceneJson,
+        bool Ifc,
+        bool Html,
+        Encoding? Encoding);
 
     // A usage error found while parsing or after the kind is known.
     private sealed class UsageException(string message) : Exception(message);
@@ -77,7 +98,7 @@ internal static class Cli
             {
                 case "info": error = Info(output, doc, command.Json); break;
                 case "tables": Tables(output, doc, command.Json); break;
-                case "export": Export(output, doc, command.Indent); break;
+                case "export": Export(output, doc, command); break;
                 default: Text(output, doc, command.Json); break;
             }
             stdout.Write(output.ToString());
@@ -110,9 +131,14 @@ internal static class Cli
         if (name is not ("info" or "tables" or "text" or "export")) throw new UsageException($"Unknown command '{name}'.");
 
         string? path = null;
+        string? outputPath = null;
         string? encodingName = null;
         bool json = false;
         bool indent = false;
+        bool sceneJson = false;
+        bool ifc = false;
+        bool html = false;
+
         for (int i = 1; i < args.Length; i++)
         {
             string arg = args[i];
@@ -126,6 +152,21 @@ internal static class Cli
                 if (indent) throw new UsageException("Option '--indent' is repeated.");
                 indent = true;
             }
+            else if (arg == "--scene-json" && name == "export")
+            {
+                if (sceneJson) throw new UsageException("Option '--scene-json' is repeated.");
+                sceneJson = true;
+            }
+            else if (arg == "--ifc" && name == "export")
+            {
+                if (ifc) throw new UsageException("Option '--ifc' is repeated.");
+                ifc = true;
+            }
+            else if (arg == "--html" && name == "export")
+            {
+                if (html) throw new UsageException("Option '--html' is repeated.");
+                html = true;
+            }
             else if (arg == "--encoding" && name == "info")
             {
                 if (encodingName != null) throw new UsageException("Option '--encoding' is repeated.");
@@ -134,11 +175,44 @@ internal static class Cli
             }
             else if (string.IsNullOrWhiteSpace(arg)) throw new UsageException("The file name is empty.");
             else if (arg[0] == '-') throw new UsageException($"Unknown option '{arg}' for '{name}'.");
-            else if (path != null) throw new UsageException($"Unexpected argument '{arg}'.");
-            else path = arg;
+            else if (path == null) path = arg;
+            else if (outputPath == null && name == "export") outputPath = arg;
+            else throw new UsageException($"Unexpected argument '{arg}'.");
         }
         if (path == null) throw new UsageException("No file given.");
-        return new Command(name, path, json, indent, encodingName == null ? null : EncodingOf(encodingName));
+
+        if (name == "export")
+        {
+            if (outputPath != null && AreSameFile(path, outputPath))
+            {
+                throw new UsageException("The output file path must not be the same as the input file.");
+            }
+
+            int formatFlags = (sceneJson ? 1 : 0) + (ifc ? 1 : 0) + (html ? 1 : 0);
+            if (formatFlags > 1)
+            {
+                throw new UsageException("Options '--scene-json', '--ifc', and '--html' are mutually exclusive.");
+            }
+
+            if (formatFlags == 0 && outputPath != null)
+            {
+                string ext = Path.GetExtension(outputPath);
+                if (ext.Equals(".ifc", StringComparison.OrdinalIgnoreCase))
+                {
+                    ifc = true;
+                }
+                else if (ext.Equals(".html", StringComparison.OrdinalIgnoreCase) || ext.Equals(".htm", StringComparison.OrdinalIgnoreCase))
+                {
+                    html = true;
+                }
+                else if (outputPath.EndsWith(".scene.json", StringComparison.OrdinalIgnoreCase))
+                {
+                    sceneJson = true;
+                }
+            }
+        }
+
+        return new Command(name, path, outputPath, json, indent, sceneJson, ifc, html, encodingName == null ? null : EncodingOf(encodingName));
     }
 
     // Strict encodings: a byte the encoding does not define is an input error, never replaced.
@@ -300,12 +374,240 @@ internal static class Cli
         }
     }
 
-    private static void Export(TextWriter w, TdbDocument doc, bool indent)
+    private static void Export(TextWriter w, TdbDocument doc, Command cmd)
     {
         if (doc is not Db1Document db1) throw new WrongKindException($"'export' needs a model database (.db1), not {doc.Kind}.");
         var model = db1.ReadModel();
-        w.WriteLine(model.ToJson(indent));
+        model.ValidateFiniteNumbers();
+
+        if (cmd.Ifc)
+        {
+            if (cmd.OutputPath != null)
+            {
+                WriteFileAtomically(cmd.Path, cmd.OutputPath, tmp => model.WriteIfc(tmp));
+            }
+            else
+            {
+                w.Write(model.ToIfc());
+            }
+        }
+        else if (cmd.Html)
+        {
+            if (cmd.OutputPath == null)
+            {
+                throw new UsageException("HTML viewer export requires an output file path (e.g. 'tdbio export model.db1 viewer.html').");
+            }
+            var sceneResult = TdbSceneReader.Read(model, new TdbSceneOptions
+            {
+                ModelKey = Path.GetFileNameWithoutExtension(cmd.Path)
+            });
+            var errors = sceneResult.Document.Validate().Where(d => d.Severity == SceneSeverity.Error).ToList();
+            if (errors.Count > 0)
+            {
+                throw new InvalidDataException(errors[0].Message);
+            }
+            WriteFileAtomically(cmd.Path, cmd.OutputPath, tmp => HtmlViewerExporter.Save(sceneResult.Document, tmp));
+        }
+        else if (cmd.SceneJson)
+        {
+            var sceneResult = TdbSceneReader.Read(model, new TdbSceneOptions
+            {
+                ModelKey = Path.GetFileNameWithoutExtension(cmd.Path)
+            });
+            var errors = sceneResult.Document.Validate().Where(d => d.Severity == SceneSeverity.Error).ToList();
+            if (errors.Count > 0)
+            {
+                throw new InvalidDataException(errors[0].Message);
+            }
+            if (cmd.OutputPath != null)
+            {
+                WriteFileAtomically(cmd.Path, cmd.OutputPath, tmp =>
+                {
+                    if (cmd.Indent)
+                    {
+                        using var fs = File.Create(tmp);
+                        var options = SceneJson.CreateOptions();
+                        options.WriteIndented = true;
+                        System.Text.Json.JsonSerializer.Serialize(fs, sceneResult.Document, options);
+                    }
+                    else
+                    {
+                        SceneJson.Save(sceneResult.Document, tmp);
+                    }
+                });
+            }
+            else if (cmd.Indent)
+            {
+                var options = SceneJson.CreateOptions();
+                options.WriteIndented = true;
+                w.WriteLine(System.Text.Json.JsonSerializer.Serialize(sceneResult.Document, options));
+            }
+            else
+            {
+                w.WriteLine(SceneJson.Write(sceneResult.Document));
+            }
+        }
+        else
+        {
+            if (cmd.OutputPath != null)
+            {
+                WriteFileAtomically(cmd.Path, cmd.OutputPath, tmp =>
+                {
+                    using var fs = File.Create(tmp);
+                    model.WriteJson(fs, cmd.Indent);
+                });
+            }
+            else
+            {
+                w.WriteLine(model.ToJson(cmd.Indent));
+            }
+        }
     }
+
+    private static void WriteFileAtomically(string inputPath, string outputPath, Action<string> writeAction)
+    {
+        if (AreSameFile(inputPath, outputPath))
+        {
+            throw new UsageException("The output file path must not be the same as the input file.");
+        }
+
+        string fullPath = Path.GetFullPath(outputPath);
+        string? dir = Path.GetDirectoryName(fullPath);
+        if (string.IsNullOrEmpty(dir))
+        {
+            dir = ".";
+        }
+        string tempPath = Path.Combine(dir, $".{Path.GetFileName(fullPath)}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            writeAction(tempPath);
+            if (AreSameFile(inputPath, outputPath))
+            {
+                throw new UsageException("The output file path must not be the same as the input file.");
+            }
+            File.Move(tempPath, fullPath, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(tempPath))
+            {
+                try { File.Delete(tempPath); } catch { /* ignore temp cleanup error */ }
+            }
+        }
+    }
+
+    internal static string ResolveCanonicalPath(string path)
+    {
+        string fullPath = Path.GetFullPath(path);
+        string? root = Path.GetPathRoot(fullPath);
+        if (string.IsNullOrEmpty(root))
+        {
+            return fullPath;
+        }
+
+        string remaining = fullPath[root.Length..];
+        string current = root;
+        string[] segments = remaining.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
+
+        foreach (string segment in segments)
+        {
+            current = Path.Combine(current, segment);
+            if (Directory.Exists(current))
+            {
+                try
+                {
+                    var target = Directory.ResolveLinkTarget(current, returnFinalTarget: true);
+                    if (target != null)
+                    {
+                        current = target.FullName;
+                    }
+                }
+                catch (IOException) { }
+            }
+            else if (File.Exists(current))
+            {
+                try
+                {
+                    var target = File.ResolveLinkTarget(current, returnFinalTarget: true);
+                    if (target != null)
+                    {
+                        current = target.FullName;
+                    }
+                }
+                catch (IOException) { }
+            }
+        }
+
+        return Path.GetFullPath(current);
+    }
+
+    internal static bool AreSameFile(string path1, string path2)
+    {
+        string r1 = ResolveCanonicalPath(path1);
+        string r2 = ResolveCanonicalPath(path2);
+        if (string.Equals(r1, r2, OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (File.Exists(path1) && File.Exists(path2))
+        {
+            try
+            {
+                var f1 = new FileInfo(path1);
+                var f2 = new FileInfo(path2);
+                string? t1 = f1.ResolveLinkTarget(true)?.FullName;
+                string? t2 = f2.ResolveLinkTarget(true)?.FullName;
+                string comp1 = t1 != null ? ResolveCanonicalPath(t1) : r1;
+                string comp2 = t2 != null ? ResolveCanonicalPath(t2) : r2;
+                if (string.Equals(comp1, comp2, OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+            catch (IOException) { }
+
+            if (OperatingSystem.IsWindows())
+            {
+                try
+                {
+                    using var s1 = new FileStream(path1, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                    using var s2 = new FileStream(path2, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                    if (GetFileInformationByHandle(s1.SafeFileHandle.DangerousGetHandle(), out var i1) &&
+                        GetFileInformationByHandle(s2.SafeFileHandle.DangerousGetHandle(), out var i2))
+                    {
+                        if (i1.VolumeSerialNumber == i2.VolumeSerialNumber &&
+                            i1.FileIndexHigh == i2.FileIndexHigh &&
+                            i1.FileIndexLow == i2.FileIndexLow)
+                        {
+                            return true;
+                        }
+                    }
+                }
+                catch (Exception) { }
+            }
+        }
+
+        return false;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct BY_HANDLE_FILE_INFORMATION
+    {
+        public uint FileAttributes;
+        public System.Runtime.InteropServices.ComTypes.FILETIME CreationTime;
+        public System.Runtime.InteropServices.ComTypes.FILETIME LastAccessTime;
+        public System.Runtime.InteropServices.ComTypes.FILETIME LastWriteTime;
+        public uint VolumeSerialNumber;
+        public uint FileSizeHigh;
+        public uint FileSizeLow;
+        public uint NumberOfLinks;
+        public uint FileIndexHigh;
+        public uint FileIndexLow;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetFileInformationByHandle(IntPtr hFile, out BY_HANDLE_FILE_INFORMATION lpFileInformation);
 
     // The number of blocks below the root and the deepest level (the root is level 0).
     private static (int Blocks, int Depth) Measure(TemplateBlock block)

@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace TdbIO;
 
 /// <summary>Represents an in-memory, read-only object model decoded from a Tekla Structures model database (.db1).</summary>
@@ -101,6 +103,97 @@ public sealed class TeklaModel
     /// <summary>Writes the decoded model as JSON using a <see cref="System.Text.Json.Utf8JsonWriter"/>.</summary>
     /// <param name="writer">The UTF-8 JSON writer.</param>
     public void WriteJson(System.Text.Json.Utf8JsonWriter writer) => Internal.ModelJsonWriter.Write(this, writer);
+
+    /// <summary>Serializes the decoded model to an IFC STEP physical file string.</summary>
+    /// <param name="options">Options controlling IFC export, or <c>null</c> for defaults.</param>
+    /// <returns>An IFC STEP string representation of the model.</returns>
+    public string ToIfc(TeklaIfcExportOptions? options = null) => Internal.Export.IfcExporter.ToString(this, options);
+
+    /// <summary>Writes the decoded model as an IFC STEP physical file to a stream.</summary>
+    /// <param name="stream">The output stream.</param>
+    /// <param name="options">Options controlling IFC export, or <c>null</c> for defaults.</param>
+    public void WriteIfc(Stream stream, TeklaIfcExportOptions? options = null) => Internal.Export.IfcExporter.Write(this, stream, options);
+
+    /// <summary>Writes the decoded model as an IFC STEP physical file to a file path.</summary>
+    /// <param name="path">The destination file path.</param>
+    /// <param name="options">Options controlling IFC export, or <c>null</c> for defaults.</param>
+    public void WriteIfc(string path, TeklaIfcExportOptions? options = null) => Internal.Export.IfcExporter.WriteFile(this, path, options);
+
+    /// <summary>Validates that all geometric coordinates, lengths and numeric attributes are finite floating-point numbers.</summary>
+    /// <exception cref="InvalidDataException">Thrown when any coordinate, dimension or numeric attribute is NaN or Infinity.</exception>
+    public void ValidateFiniteNumbers()
+    {
+        static void Check(string propertyName, double value, long offset = 0)
+        {
+            if (!double.IsFinite(value))
+                throw Internal.FormatError.At(string.Create(CultureInfo.InvariantCulture, $"Non-finite number {value} in '{propertyName}'"), offset);
+        }
+
+        static void CheckPoint(ModelPoint pt)
+        {
+            long ptOff = pt.Offset;
+            Check("x", pt.X, ptOff > 0 ? ptOff + 8 : 0);
+            Check("y", pt.Y, ptOff > 0 ? ptOff + 16 : 0);
+            Check("z", pt.Z, ptOff > 0 ? ptOff + 24 : 0);
+        }
+
+        static void CheckAttributes(ModelObject obj)
+        {
+            foreach (var (k, v) in obj.NumericAttributes)
+            {
+                long off = obj.NumericAttributeOffsets?.GetValueOrDefault(k) ?? 0;
+                Check(k, v, off);
+            }
+        }
+
+        foreach (var p in Parts)
+        {
+            Check("length", p.Length, p.LengthOffset);
+            if (p.StartPoint.HasValue) CheckPoint(p.StartPoint.Value);
+            if (p.EndPoint.HasValue) CheckPoint(p.EndPoint.Value);
+            if (p.CoordinateSystem.HasValue)
+            {
+                var cs = p.CoordinateSystem.Value;
+                long csOff = cs.Offset;
+                Check("x", cs.X, csOff > 0 ? csOff + 8 : 0);
+                Check("y", cs.Y, csOff > 0 ? csOff + 16 : 0);
+                Check("z", cs.Z, csOff > 0 ? csOff + 24 : 0);
+                Check("length", cs.Length, csOff > 0 ? csOff + 32 : 0);
+            }
+            CheckAttributes(p);
+        }
+
+        foreach (var a in Assemblies)
+        {
+            CheckAttributes(a);
+        }
+
+        foreach (var b in Bolts)
+        {
+            if (b.FirstPoint.HasValue) CheckPoint(b.FirstPoint.Value);
+            if (b.SecondPoint.HasValue) CheckPoint(b.SecondPoint.Value);
+            foreach (var h in b.Holes)
+            {
+                long hOff = h.Offset;
+                Check("pointZ", h.PointZ, hOff > 0 ? hOff + 16 : 0);
+                Check("length", h.Length, hOff > 0 ? hOff + 24 : 0);
+                Check("shorteningLength", h.ShorteningLength, hOff > 0 ? hOff + 40 : 0);
+            }
+            foreach (var pos in b.Positions)
+            {
+                long posOff = pos.Offset;
+                Check("x", pos.X, posOff > 0 ? posOff + 8 : 0);
+                Check("y", pos.Y, posOff > 0 ? posOff + 16 : 0);
+                Check("z", pos.Z, posOff > 0 ? posOff + 24 : 0);
+            }
+            CheckAttributes(b);
+        }
+
+        foreach (var w in Welds)
+        {
+            CheckAttributes(w);
+        }
+    }
 }
 
 /// <summary>Base class for all entities in a Tekla Structures model.</summary>
@@ -136,6 +229,11 @@ public class ModelObject
 
     /// <summary>The unique RFC 4122 GUID of the object.</summary>
     public Guid Guid { get; }
+
+    /// <summary>The 22-character buildingSMART IFC GlobalId corresponding to <see cref="Guid"/>, or derived from <see cref="Id"/>.</summary>
+    public string IfcGuid => Guid != Guid.Empty
+        ? Internal.Export.IfcGuid.ToIfcGuid(Guid)
+        : Internal.Export.IfcGuid.FromElementId(Id, GetType().Name);
 
     /// <summary>The object type code (e.g. 1 for part, 2 for assembly, 3 for connection, 9 for bolt, 13 for weld).</summary>
     public int Type { get; }
@@ -472,4 +570,14 @@ public readonly record struct ModelBoltHole(
 
     /// <inheritdoc/>
     public override string ToString() => $"Hole #{No} in Part #{PartId} Grip={Length:F1}";
+}
+
+/// <summary>Utilities for buildingSMART IFC GlobalId generation and conversion.</summary>
+public static class TeklaIfcGuid
+{
+    /// <summary>Converts a .NET Guid to a 22-character buildingSMART IFC GlobalId.</summary>
+    public static string ToIfcGuid(Guid guid) => Internal.Export.IfcGuid.ToIfcGuid(guid);
+
+    /// <summary>Generates a deterministic 22-character buildingSMART IFC GlobalId from an element identifier.</summary>
+    public static string FromElementId(int elemId, string ns = "Tekla") => Internal.Export.IfcGuid.FromElementId(elemId, ns);
 }

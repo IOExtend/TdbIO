@@ -14,10 +14,12 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="IOViewer" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\TdbIO\TdbIO.csproj" />
+    <ProjectReference Include="..\..\src\TdbIO.Scene\TdbIO.Scene.csproj" />
     <!-- The command line of the tool, compiled here to test it without starting a process. -->
     <Compile Include="..\..\src\TdbIO.Cli\Cli.cs" Link="Cli\Cli.cs" />
     <Compile Include="..\..\src\TdbIO.Cli\Output.cs" Link="Cli\Output.cs" />

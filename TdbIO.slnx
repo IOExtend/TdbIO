@@ -1,7 +1,9 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/TdbIO/TdbIO.csproj" />
+    <Project Path="src/TdbIO.Scene/TdbIO.Scene.csproj" />
     <Project Path="src/TdbIO.Cli/TdbIO.Cli.csproj" />
   </Folder>
   <Project Path="tests/TdbIO.Tests/TdbIO.Tests.csproj" />
+  <Project Path="tests/TdbIO.Scene.Tests/TdbIO.Scene.Tests.csproj" />
 </Solution>

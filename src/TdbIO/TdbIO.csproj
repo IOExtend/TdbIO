@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="TdbIO.Tests" />
+    <InternalsVisibleTo Include="TdbIO.Scene.Tests" />
   </ItemGroup>
 
 </Project>
