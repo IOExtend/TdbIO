@@ -39,8 +39,13 @@ internal static class Nc1Reader
 
         while (head.Text is not null)
         {
-            var body = new List<Line>();
+            if (head.Text == "ST")
+                throw Error("an ST block may only start the file", head);
+
+            var raw = new List<string>();
+            var lines = new List<Nc1Line>();
             Line nextHead = default;
+
             while (reader.TryReadLine(out Line line))
             {
                 if (IsCode(line.Text))
@@ -48,32 +53,45 @@ internal static class Nc1Reader
                     nextHead = line;
                     break;
                 }
-                body.Add(line);
+
+                switch (head.Text)
+                {
+                    case "EN":
+                        throw Error("data after the EN block", line);
+                    case "AK":
+                        lines.Add(ValidateAndParseAkLine(line, lines.Count));
+                        break;
+                    case "BO":
+                        lines.Add(ValidateAndParseBoLine(line));
+                        break;
+                }
+                raw.Add(line.Text);
             }
 
-            var raw = new string[body.Count];
-            for (int i = 0; i < body.Count; i++) raw[i] = body[i].Text;
-
-            switch (head.Text)
+            if (head.Text == "EN")
             {
-                case "ST":
-                    throw Error("an ST block may only start the file", head);
-                case "EN":
-                    if (body.Count > 0) throw Error("data after the EN block", body[0]);
-                    if (nextHead.Text is not null) throw Error("data after the EN block", nextHead);
-                    blocks.Add(new("EN", head.Number, raw, []));
-                    break;
-                case "AK":
-                    blocks.Add(new("AK", head.Number, raw, ReadAk(head, body, warnings)));
-                    break;
-                case "BO":
-                    blocks.Add(new("BO", head.Number, raw, ReadBo(body)));
-                    break;
-                default:
-                    // Other codes are not read; their lines are kept as written.
-                    blocks.Add(new(head.Text, head.Number, raw, []));
-                    break;
+                if (nextHead.Text is not null)
+                    throw Error("data after the EN block", nextHead);
+                blocks.Add(new("EN", head.Number, raw.ToArray(), []));
             }
+            else if (head.Text == "AK")
+            {
+                if (lines.Count == 0) throw Error("AK block has no lines", head);
+                var first = lines[0].Values;
+                var last = lines[^1].Values;
+                if (first[0].Number != last[0].Number || first[1].Number != last[1].Number)
+                    warnings.Add($"AK block at line {head.Number}: the last point differs from the first, the contour is open");
+                blocks.Add(new("AK", head.Number, raw.ToArray(), lines.ToArray()));
+            }
+            else if (head.Text == "BO")
+            {
+                blocks.Add(new("BO", head.Number, raw.ToArray(), lines.ToArray()));
+            }
+            else
+            {
+                blocks.Add(new(head.Text, head.Number, raw.ToArray(), []));
+            }
+
             head = nextHead;
         }
 
@@ -183,42 +201,27 @@ internal static class Nc1Reader
         return (second.Text[3..], fields, partLength, rawLines);
     }
 
-    private static Nc1Line[] ReadAk(Line head, List<Line> body, List<string> warnings)
+    private static Nc1Line ValidateAndParseAkLine(Line line, int index)
     {
-        if (body.Count == 0) throw Error("AK block has no lines", head);
-        var result = new Nc1Line[body.Count];
-        for (int i = 0; i < body.Count; i++)
+        string[] tokens = Tokens(line);
+        if (index == 0)
         {
-            string[] tokens = Tokens(body[i]);
-            if (i == 0)
-            {
-                if (tokens.Length != 8 || !IsLabel(tokens[0])) throw Error("the first AK line must hold a label letter and 7 numbers", body[i]);
-                result[i] = new Nc1Line(tokens[0][0], Numbers(tokens, 1, body[i]));
-            }
-            else
-            {
-                if (tokens.Length > 0 && IsLabel(tokens[0])) throw Error("only the first AK line may hold a label letter", body[i]);
-                if (tokens.Length != 7) throw Error("an AK line must hold 7 numbers", body[i]);
-                result[i] = new Nc1Line(null, Numbers(tokens, 0, body[i]));
-            }
+            if (tokens.Length != 8 || !IsLabel(tokens[0])) throw Error("the first AK line must hold a label letter and 7 numbers", line);
+            return new Nc1Line(tokens[0][0], Numbers(tokens, 1, line));
         }
-        var first = result[0].Values;
-        var last = result[^1].Values;
-        if (first[0].Number != last[0].Number || first[1].Number != last[1].Number)
-            warnings.Add($"AK block at line {head.Number}: the last point differs from the first, the contour is open");
-        return result;
+        else
+        {
+            if (tokens.Length > 0 && IsLabel(tokens[0])) throw Error("only the first AK line may hold a label letter", line);
+            if (tokens.Length != 7) throw Error("an AK line must hold 7 numbers", line);
+            return new Nc1Line(null, Numbers(tokens, 0, line));
+        }
     }
 
-    private static Nc1Line[] ReadBo(List<Line> body)
+    private static Nc1Line ValidateAndParseBoLine(Line line)
     {
-        var result = new Nc1Line[body.Count];
-        for (int i = 0; i < body.Count; i++)
-        {
-            string[] tokens = Tokens(body[i]);
-            if (tokens.Length != 4 || !IsLabel(tokens[0])) throw Error("a BO line must hold a label letter and 3 numbers", body[i]);
-            result[i] = new Nc1Line(tokens[0][0], Numbers(tokens, 1, body[i]));
-        }
-        return result;
+        string[] tokens = Tokens(line);
+        if (tokens.Length != 4 || !IsLabel(tokens[0])) throw Error("a BO line must hold a label letter and 3 numbers", line);
+        return new Nc1Line(tokens[0][0], Numbers(tokens, 1, line));
     }
 
     private static string[] Tokens(Line line) => line.Text.Split(' ', StringSplitOptions.RemoveEmptyEntries);

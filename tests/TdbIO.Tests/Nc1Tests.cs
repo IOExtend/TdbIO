@@ -304,4 +304,22 @@ public class Nc1Tests
         var e = Assert.Throws<InvalidDataException>(() => Read(new byte[16 * 1024 * 1024 + 1]));
         Assert.Contains("16 MiB", e.Message);
     }
+
+    [Fact]
+    public void MalformedBoBlockWithManyLinesRejectsEarlyWithoutLargeAllocation()
+    {
+        var lines = new List<string>(Synthetic.Nc1Header());
+        lines.AddRange(Synthetic.Nc1Rectangle());
+        lines.Add("BO");
+        for (int i = 0; i < 50_000; i++) lines.Add("");
+        lines.Add("EN");
+        byte[] data = Synthetic.Nc1(lines);
+
+        long before = GC.GetTotalAllocatedBytes(precise: true);
+        var e = Assert.Throws<InvalidDataException>(() => Read(data));
+        long allocated = GC.GetTotalAllocatedBytes(precise: true) - before;
+
+        Assert.Contains("a BO line must hold a label letter and 3 numbers", e.Message);
+        Assert.True(allocated < 500_000, $"Allocated {allocated} bytes, expected < 500 KB");
+    }
 }
