@@ -8,14 +8,14 @@ This document records the database and file format characteristics across multip
 
 ## Tested versions
 
-| Tekla Structures release | Version tag in header | Typical `.db1` size (unpacked) | Sample model |
-| ------------------------ | --------------------- | ------------------------------ | ------------ |
-| 2021                     | `9.08`                | ~23 MB                         | Engineering LOD350 Sample Project |
-| 2022                     | `9.21`                | ~23 MB                         | Engineering LOD350 Sample Project |
-| 2024                     | `9.52`                | ~50–62 MB                      | Sample Office Building |
-| 2025 / 2026 early        | `9.60`                | ~24–63 MB                      | Engineering LOD350 & Sample Office Building US Imp |
-| 2026.0                   | `9.65`                | ~50–62 MB                      | Sample Office Building |
-| 2026.0 current           | `9.66`                | ~50–62 MB                      | Sample Office Building US Imp & New Model |
+| Tekla Structures release | Version tag in header | Stream and section characteristics |
+| ------------------------ | --------------------- | ---------------------------------- |
+| 2021                     | `9.08`                | Multi-member gzip; multi-baseline pre-area |
+| 2022                     | `9.21`                | Multi-member gzip; dual-C9 pre-area |
+| 2024                     | `9.52`                | Multi-member gzip; dual-C9 pre-area |
+| 2025 / 2026 early        | `9.60`                | Multi-member or single-member gzip; dual-C9 pre-area |
+| 2026.0                   | `9.65`                | Multi-member or single-member gzip; dual-C9 pre-area |
+| 2026.0 current           | `9.66`                | Multi-member or single-member gzip; dual-C9 pre-area |
 
 ## Container format
 
@@ -42,7 +42,7 @@ A key variation across releases lies in how gzip compression is written to disk:
    - The file contains multiple sequential gzip blocks, each starting with `1F 8B 08 00` and having its own 8-byte trailer (`CRC-32` and `ISIZE`).
    - A trailing 20-byte empty gzip member (`1F 8B 08 00 00 00 00 00 04 0A 03 00 00 00 00 00 00 00 00 00`, ISIZE=0, CRC=0) is frequently appended as a stream terminator/flush block.
 2. **Single-member Gzip Streams:**
-   - Some models exported or saved in newer versions (such as the default 2026.0 `Sample Office Building`) are packed as a single contiguous gzip member with the declared uncompressed size at the end of the file.
+   - Some models saved in newer versions (such as 2026.0 single-member saves) are packed as a single contiguous gzip member with the declared uncompressed size at the end of the file.
 
 A compliant reader must decompress all members of a multi-member gzip stream sequentially until the end of the file.
 
@@ -64,7 +64,7 @@ The 28-byte preamble before the entries is structurally uniform across all versi
 - `Offset 69` (u32): Entry count $N$ (number of entries plus 1).
 - `Offset 73` (u32): Domain/schema field `Field73`:
   - In standard metric projects (2021, 2022, 2024, 2026), `Field73` is consistently `431`.
-  - In certain regional models (such as US Imperial), `Field73` is a larger domain ID (e.g. `5008378`).
+  - In models configured with custom or regional domain numbering environments, `Field73` can contain a larger domain ID (e.g. values exceeding `5000000`).
 
 ### Entries and terminator
 
@@ -104,7 +104,7 @@ The internal database engine (LumoDB / DBvirtual) layout is fully consistent fro
 - **Row format:**
   - 1-byte marker: `0x04` for active rows, `0x0C` for deleted or superseded rows.
   - Body: `RowSize` bytes.
-  - Trailing integers: Creation transaction `TimeId` (long) and Deletion/superseding `TimeId` (long).
+  - Trailing integers: Two signed 32-bit little-endian integers (`i32`, 4 bytes each) recording the creation transaction and deletion/superseding transaction IDs. On disk, each row occupies exactly `1 + RowSize + 4 + 4 = RowSize + 9` bytes. Note: While stored as 32-bit integers on disk, the public API exposes these values as 64-bit `long` properties (`CreationTimeId`, `DeletionTimeId`) for range safety and API consistency.
   - Row terminator: `0x00` byte after the last row of the section.
 - **Key schema table IDs:**
   - Table 1: `object`
