@@ -50,22 +50,17 @@ internal static class Gzip
         }
     }
 
-    // Reads into a buffer that grows up to the declared size, so a forged size cannot allocate memory the data does not fill.
+    // Reads into a buffer sized to the trailer's unpacked size (capped by MaxUnpackedLength).
     private static byte[] Inflate(byte[] file, int trailer, uint size)
     {
         var input = new LastByteAloneStream(file, HeaderLength, trailer);
         using var deflate = new DeflateStream(input, CompressionMode.Decompress);
-        var buffer = new byte[(int)Math.Min(size, Math.Max(65536L, file.Length * 4L))];
+        var buffer = new byte[size];
         int total = 0;
         try
         {
-            while (true)
+            while (total < buffer.Length)
             {
-                if (total == buffer.Length)
-                {
-                    if (total == size) break;
-                    Array.Resize(ref buffer, (int)Math.Min(size, buffer.Length * 2L));
-                }
                 int n = deflate.Read(buffer, total, buffer.Length - total);
                 if (n == 0) break;
                 total += n;
