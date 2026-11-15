@@ -20,5 +20,5 @@ TdbIO parses files that can come from untrusted sources. Problems that matter mo
 
 - crashes other than the documented exceptions, hangs or unbounded memory use caused by a crafted file (for example a
   gzip file that unpacks to far more than its size suggests);
-- writing any file (the library and the command line tool only read);
+- writing any file other than the output file a command was given (the library and the command line tool never modify an input file);
 - any behaviour that executes code or contacts the network (the library and the command line tool do neither).
