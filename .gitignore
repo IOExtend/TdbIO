@@ -14,3 +14,15 @@ test_files/
 # Documentation site (DocFX output and generated API pages)
 _site/
 docs/api/
+
+# Tekla database and model files never go into the repository
+*.db1
+*.db2
+*.db3
+*.db4
+*.db5
+*.nc1
+*.xsr
+
+# Local secrets
+.env
