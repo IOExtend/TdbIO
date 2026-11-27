@@ -118,8 +118,10 @@ tdbio export model.db1 viewer.html
 ```
 
 Every command takes `--json` to write one JSON object instead of text. Warnings go to standard error and do not change
-the exit code. The outputs above come from small synthetic files; the values are made up. Run `tdbio --help` for the
-usage, and see [the command line](docs/cli.md) for every key, column and JSON property.
+the exit code. The scene and HTML exports warn about the approximate geometry on standard error: how many parts are
+proxy boxes, which profiles fell back to the default dimensions and which parts have no usable geometry. The outputs
+above come from small synthetic files; the values are made up. Run `tdbio --help` for the usage, and see
+[the command line](docs/cli.md) for every key, column and JSON property.
 
 | Code | Meaning |
 | --- | --- |

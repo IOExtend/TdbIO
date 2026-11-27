@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -96,15 +97,17 @@ internal static class Cli
             // Everything is read before anything is written, so an error never leaves half an output.
             var output = new StringWriter();
             string? error = null;
+            var exportWarnings = new List<string>();
             switch (command.Name)
             {
                 case "info": error = Info(output, doc, command.Json); break;
                 case "tables": Tables(output, doc, command.Json); break;
-                case "export": Export(output, doc, command); break;
+                case "export": exportWarnings.AddRange(Export(output, doc, command)); break;
                 default: Text(output, doc, command.Json); break;
             }
             stdout.Write(output.ToString());
             foreach (string warning in doc.Warnings) stderr.WriteLine($"tdbio: warning: {warning}");
+            foreach (string warning in exportWarnings) stderr.WriteLine($"tdbio: warning: {warning}");
             if (error != null)
             {
                 stderr.WriteLine($"tdbio: {error}");
@@ -376,8 +379,9 @@ internal static class Cli
         }
     }
 
-    private static void Export(TextWriter w, TdbDocument doc, Command cmd)
+    private static IReadOnlyList<string> Export(TextWriter w, TdbDocument doc, Command cmd)
     {
+        var geometryWarnings = new List<string>();
         if (doc is not Db1Document db1) throw new WrongKindException($"'export' needs a model database (.db1), not {doc.Kind}.");
         var model = db1.ReadModel();
         model.ValidateFiniteNumbers();
@@ -408,6 +412,7 @@ internal static class Cli
             {
                 throw new InvalidDataException(errors[0].Message);
             }
+            geometryWarnings.AddRange(SceneGeometryWarnings(sceneResult));
             WriteFileAtomically(cmd.Path, cmd.OutputPath, tmp => HtmlViewerExporter.Save(sceneResult.Document, tmp));
         }
         else if (cmd.SceneJson)
@@ -421,6 +426,7 @@ internal static class Cli
             {
                 throw new InvalidDataException(errors[0].Message);
             }
+            geometryWarnings.AddRange(SceneGeometryWarnings(sceneResult));
             if (cmd.OutputPath != null)
             {
                 WriteFileAtomically(cmd.Path, cmd.OutputPath, tmp =>
@@ -464,7 +470,55 @@ internal static class Cli
                 w.WriteLine(model.ToJson(cmd.Indent));
             }
         }
+        return geometryWarnings;
     }
+
+    // The warning lines for the geometry findings of a scene conversion: one summary line per kind and one detail line
+    // per part with fallback dimensions or without a usable geometry, up to DetailLimit parts per kind. Without the
+    // 'tdbio: warning: ' prefix; the caller adds it when the lines are written to standard error.
+    private const int DetailLimit = 20;
+
+    internal static IReadOnlyList<string> SceneGeometryWarnings(TdbSceneResult result)
+    {
+        var lines = new List<string>();
+        int proxies = 0;
+        var fallback = new List<TdbGeometryDiagnostic>();
+        var none = new List<TdbGeometryDiagnostic>();
+        foreach (var d in result.GeometryDiagnostics)
+        {
+            switch (d.Kind)
+            {
+                case TdbGeometryDiagnosticKind.ProxyBox: proxies++; break;
+                case TdbGeometryDiagnosticKind.FallbackDimensions: fallback.Add(d); break;
+                case TdbGeometryDiagnosticKind.NoGeometry: none.Add(d); break;
+            }
+        }
+        if (proxies > 0)
+        {
+            lines.Add(string.Create(CultureInfo.InvariantCulture,
+                $"{proxies} of {result.PartCount} {Noun(result.PartCount, "part", "parts")} {Noun(proxies, "uses", "use")} rectangular proxy boxes instead of decoded Tekla solids; the meshes are for viewing, not for measurements."));
+        }
+        AddDetails(lines, fallback, Noun(fallback.Count, "part uses", "parts use") + " the default dimensions of 150x150 mm because the profile was not recognized:");
+        AddDetails(lines, none, Noun(none.Count, "part has", "parts have") + " no usable geometry:");
+        return lines;
+    }
+
+    // The summary of one kind of geometry findings and its per-part detail lines, capped at DetailLimit.
+    private static void AddDetails(List<string> lines, List<TdbGeometryDiagnostic> found, string summary)
+    {
+        if (found.Count == 0)
+        {
+            return;
+        }
+        lines.Add(string.Create(CultureInfo.InvariantCulture, $"{found.Count} {summary}"));
+        lines.AddRange(found.Take(DetailLimit).Select(d => "  " + d.Message));
+        if (found.Count > DetailLimit)
+        {
+            lines.Add(string.Create(CultureInfo.InvariantCulture, $"  and {found.Count - DetailLimit} more parts; the full list is in TdbSceneResult.GeometryDiagnostics."));
+        }
+    }
+
+    private static string Noun(int count, string singular, string plural) => count == 1 ? singular : plural;
 
     private static void WriteFileAtomically(string inputPath, string outputPath, Action<string> writeAction)
     {

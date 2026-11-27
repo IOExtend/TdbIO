@@ -22,6 +22,7 @@ Usage: tdbio info <file> [--json] [--encoding ascii|utf-8|cp1251|cp1252]
 | `tdbio info <file>` | every supported kind | `key: value` lines: the kind, its main values and the number of warnings. |
 | `tdbio tables <file>` | model databases (`.db1`), DBV@ files | A tab-separated header line, then one line per table section. |
 | `tdbio text <file>` | model databases (`.db1`) | A tab-separated header line, then one line per text chain, then one line per orphan row. |
+| `tdbio export <file> [output]` | model databases (`.db1`) | The object model as JSON (default), or with an option: `--ifc` (IFC), `--scene-json` (an IOScene scene), or no format option and an `.html` output (a standalone viewer). |
 | `tdbio --help`, `tdbio -h` | | The usage text, on standard output. |
 | `tdbio --version` | | `tdbio <version>`, for example `tdbio 0.1.0`. |
 
@@ -36,6 +37,19 @@ from its extension (reports, which have no signature, are recognised by the `.xs
 | `--encoding <name>` | `info`, `export` | Read a template or report, or the text values of the table rows of a model database (`.db1`) or DBV@ file, with this encoding instead of detecting it: `ascii`, `utf-8`, `cp1251` or `cp1252`. Give it for a model saved with a Western European code page, which the detection reads as `cp1251`. The encoding is strict: a byte it does not define is an input error. Given for any other kind of file, it is a usage error. |
 
 An option given twice is a usage error.
+
+## Scene and HTML geometry warnings
+
+`tdbio export model.db1 model.scene.json --scene-json` and the HTML viewer export build the scene of the `TdbIO.Scene`
+adapter. Every part is drawn as a rectangular proxy box between its start and end point, with the width and height
+estimated from the profile name (150 mm × 150 mm when the name gives none). The meshes are not decoded Tekla solids
+and are not made for clash detection or exact measurement.
+
+Both exports print the geometry findings on standard error and keep the scene JSON or the HTML file alone on standard
+output: one line with the number of proxy boxes, then one line per part whose profile was not recognized (the proxy
+box falls back to the default dimensions) and one line per part with no usable geometry (no start or end point, or a
+degenerate axis). Up to 20 parts per kind are listed; the rest are counted in the summary line, and the full list is
+in `TdbSceneResult.GeometryDiagnostics`. The warnings do not change the exit code.
 
 ## Exit codes
 

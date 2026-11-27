@@ -141,6 +141,17 @@ High-level connected object model produced by `Db1Document.ReadModel()`:
 | `ModelCoordsys` | Local coordinate system origin and scale: `Id`, `X`, `Y`, `Z`, `Length`. |
 | `ModelBoltHole` | Bolt hole penetration: `No`, `PartId`, `Part`, `PointZ`, `Length`, `LongHoleDir`, `LongHoleType`, `ShorteningLength`. |
 
+## Scene adapter
+
+`TdbIO.Scene` (a separate package) turns a `TeklaModel` into an IOScene scene document in metres:
+
+| Type | Use |
+| --- | --- |
+| `TdbSceneReader` | `Read(path, options)` and `Read(model, options)` convert a model database or an in-memory model into a scene. |
+| `TdbSceneOptions` | `ModelKey`, `IncludeBolts`, `IncludeWelds`, `GenerateGeometry` (all true by default). |
+| `TdbSceneResult` | `Document` (the scene), `Diagnostics` (the structural validation of the scene), `GeometryDiagnostics`, `MetresPerUnit`, `ElementCount`, `PartCount`, `ElementsWithGeometry`, `GeometryCount`. |
+| `TdbGeometryDiagnostic` | One finding about the geometry of a part: `Kind` (`ProxyBox`, `FallbackDimensions`, `NoGeometry`), `ElementId`, `SourceId`, `Profile`, `Message`. Every mesh is a rectangular proxy box around the part axis, not the decoded Tekla solid; the scene is for viewing, not for clash detection or exact measurement. |
+
 ## Files next to the model
 
 | Type | Use |

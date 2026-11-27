@@ -24,6 +24,10 @@ API between minor releases.
   of table rows can be read in a given encoding. `TdbReadOptions.TextEncoding` now applies to them too.
 - Tests of the adapter in `TdbIO.Scene.Tests`, and test runs on Linux and macOS in CI.
 - `docs/versions.md`: differences between Tekla Structures versions.
+- Geometry diagnostics of the scene adapter: `TdbSceneResult.GeometryDiagnostics` (`TdbGeometryDiagnostic`) reports
+  the parts drawn as rectangular proxy boxes, the parts whose profile was not recognized (the proxy box falls back to
+  the default dimensions of 150 mm × 150 mm) and the parts without a usable geometry. `tdbio export --scene-json` and
+  the HTML viewer print them as warnings on standard error; the JSON and HTML output stay alone on standard output.
 
 ### Changed
 
