@@ -48,8 +48,8 @@ dotnet build TdbIO.slnx -c Release
 dotnet test TdbIO.slnx -c Release
 ```
 
-The library is in `src/TdbIO`, the CLI in `src/TdbIO.Cli`, and tests in
-`tests/TdbIO.Tests`.
+The library is in `src/TdbIO`, the scene adapter in `src/TdbIO.Scene`, the CLI in
+`src/TdbIO.Cli`, and tests in `tests/TdbIO.Tests` and `tests/TdbIO.Scene.Tests`.
 
 Tests that need private inputs are skipped with a message when those
 inputs are unavailable:
@@ -64,6 +64,34 @@ inputs are unavailable:
   is also searched and is ignored by git.
 
 The repository ships no Tekla Structures files.
+
+## Library boundaries
+
+The native reader, the decoded object model and the JSON output follow the
+Tekla Structures file model and live in the engine (`src/TdbIO`). The IFC
+output is target-format output: its sources are in `src/TdbIO/Ifc` and are
+kept apart from the native engine. The regular package keeps their
+signatures and namespaces. Keep new format operations with the reader or
+the model; the unit declared in an IFC file belongs to the IFC output.
+
+`TdbIO.Scene` converts the model into an IOScene document and uses only the
+public API of `TdbIO`. No engine project references an IOScene type or
+another IOExtend package, and the engine grants the adapter no access to its
+internals.
+
+CI also compiles the native engine and its scene adapter without the IFC
+sources. Use a separate artifact path for this compile check. It keeps the
+regular build available for testing and produces no NuGet package.
+
+```sh
+dotnet build src/TdbIO.Scene/TdbIO.Scene.csproj -c Release -p:BuildNativeCoreOnly=true --artifacts-path ./artifacts/native-core-check
+```
+
+`dotnet pack` compares the public API of both target frameworks with the
+last published release (`PackageValidationBaselineVersion`), so a change
+that breaks a consumer fails the pack. Record an intended removal in
+`src/TdbIO/CompatibilitySuppressions.xml` and name it under "Breaking" in
+`CHANGELOG.md`.
 
 ## Code conventions
 
@@ -92,6 +120,14 @@ compare the before and after outputs. Investigate differences and explain
 intentional changes in the pull request, without naming private files or
 quoting their content.
 
+Export outputs must not change unintentionally either. Before changing the
+object model, an exporter or the scene adapter, export the same input files
+with the existing code (`tdbio export` as JSON, scene JSON and IFC) and keep
+the results outside the repository. Export them again after the change with
+the same options and compare. An IFC file holds the export time and random
+identifiers of its spatial structure, so compare it with those values
+replaced; JSON and scene JSON must be equal byte for byte.
+
 ## Pull requests
 
 Include:
@@ -99,7 +135,7 @@ Include:
 - A description of the problem and the change.
 - Tests for behavior changes, including relevant errors and edge cases.
 - The build and test commands run, their results, and any skipped checks.
-- Before and after output comparison results when reading is affected.
+- Before and after output comparison results when reading or an export is affected.
 
 Do not add Tekla Structures models, customer data, vendor code, or
 binaries to the repository. Keep private test files outside version

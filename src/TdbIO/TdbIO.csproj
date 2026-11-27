@@ -1,13 +1,26 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Description>Reads Tekla Structures model files (.db1, .db2, DBV@ files, id range and GUID map files), DSTV NC files (.nc1), templates (.tpl, .rpt) and reports (.xsr). Pure managed code, no dependencies.</Description>
+    <Description>Reads Tekla Structures model files (.db1, .db2, DBV@ files, id range and GUID map files), DSTV NC files (.nc1), templates (.tpl, .rpt) and reports (.xsr), decodes the object model of a model database, and exports JSON and IFC. Pure managed code, no dependencies.</Description>
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <RootNamespace>TdbIO</RootNamespace>
     <AssemblyName>TdbIO</AssemblyName>
     <PackageId>TdbIO</PackageId>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- dotnet pack compares the public API of both target frameworks with the last published release. -->
+    <EnablePackageValidation>true</EnablePackageValidation>
+    <PackageValidationBaselineVersion>0.1.0</PackageValidationBaselineVersion>
   </PropertyGroup>
+
+  <!-- The native engine is everything except the target-format output in Ifc. CI compiles it together with the scene
+       adapter (BuildNativeCoreOnly=true); that build produces no package. The regular build keeps the same public types. -->
+  <PropertyGroup Condition="'$(BuildNativeCoreOnly)' == 'true'">
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(BuildNativeCoreOnly)' == 'true'">
+    <Compile Remove="Ifc/**/*.cs" />
+  </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="TdbIO.Tests" />

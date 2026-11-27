@@ -16,7 +16,10 @@ internal static class DbvReader
     // Signature, name length, a one-byte name, the prologue, the list marker and the list header.
     private const int MinLength = 8 + 1 + 24 + 4 + 16;
 
-    public static DbvDocument Read(byte[] payload, List<string> warnings)
+    /// <param name="payload">The unpacked bytes of the file.</param>
+    /// <param name="warnings">Receives a line for every value that differs from the ones always seen.</param>
+    /// <param name="textEncoding">Kept for the typed decoders of the rows (<see cref="TableRow.TextEncoding"/>).</param>
+    public static DbvDocument Read(byte[] payload, List<string> warnings, Encoding? textEncoding = null)
     {
         ArgumentNullException.ThrowIfNull(payload);
         ReadOnlySpan<byte> d = payload;
@@ -90,7 +93,7 @@ internal static class DbvReader
             Expect(warnings, c9[i] == new DbvC9Record(0, 1, 0, -1), Invariant($"C9 record {i}"), p + 4);
         }
 
-        var sections = SectionWalker.Walk(payload, (int)p, 0, SectionMode.Dbv, warnings);
+        var sections = SectionWalker.Walk(payload, (int)p, 0, SectionMode.Dbv, warnings, textEncoding);
         return new DbvDocument(warnings.AsReadOnly(), name, Array.AsReadOnly(prologue), Array.AsReadOnly(listHeader),
             Array.AsReadOnly(records), b, c, Array.AsReadOnly(l1), Array.AsReadOnly(l2), Array.AsReadOnly(t), Array.AsReadOnly(c9),
             sections, payload);

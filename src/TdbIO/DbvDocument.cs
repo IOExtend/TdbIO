@@ -1,3 +1,4 @@
+using System.Text;
 using TdbIO.Internal;
 
 namespace TdbIO;
@@ -81,5 +82,5 @@ public sealed class DbvDocument : TdbDocument
     /// <summary>The unpacked bytes of the file.</summary>
     public ReadOnlyMemory<byte> Payload { get; }
 
-    internal static DbvDocument Create(byte[] data) => DbvReader.Read(data, []);
+    internal static DbvDocument Create(byte[] data, Encoding? textEncoding = null) => DbvReader.Read(data, [], textEncoding);
 }

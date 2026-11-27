@@ -6,7 +6,7 @@ namespace TdbIO;
 public sealed class TableSection
 {
     internal TableSection(int ordinal, long offset, long end, int? key, int rowSize, IReadOnlyList<uint> descriptors,
-        long rowsOffset, IReadOnlyList<TableRow> rows)
+        long rowsOffset, IReadOnlyList<TableRow> rows, Internal.RowText? text = null)
     {
         Ordinal = ordinal;
         Offset = offset;
@@ -16,6 +16,7 @@ public sealed class TableSection
         Descriptors = descriptors;
         RowsOffset = rowsOffset;
         Rows = rows;
+        Text = text;
     }
 
     /// <summary>The position of the section in its file, from 0.</summary>
@@ -46,6 +47,9 @@ public sealed class TableSection
 
     /// <summary>The rows in file order. The list is a view over the data: each row is built when it is read.</summary>
     public IReadOnlyList<TableRow> Rows { get; }
+
+    /// <summary>The text rule of the file, shared with the rows; see <see cref="TableRow.TextEncoding"/>.</summary>
+    internal Internal.RowText? Text { get; }
 
     private IReadOnlyList<T> DecodeRows<T>(int expectedSize, Func<TableRow, T> decode)
     {

@@ -57,21 +57,27 @@ internal static class Bytes
         return new Guid(d.Slice((int)at, 16), bigEndian: true);
     }
 
-    private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
-
-    public static string AsciiString(ReadOnlySpan<byte> d, long at, int length)
+    /// <summary>Decodes the zero-terminated text value of a row body: the bytes from <paramref name="at"/> up to the first
+    /// NUL, or to the end of the field of <paramref name="length"/> bytes. With <paramref name="encoding"/> the value is
+    /// read in that encoding; otherwise each value is ASCII, UTF-8, then <paramref name="codePage"/>, the code page chosen
+    /// for the file (<see cref="RowText"/>), or code page 1251 or 1252 chosen from the value when it is null
+    /// (<see cref="TextDecoding.DecodeUnmarked"/>). A text of a model is single-byte in the code page of the system that
+    /// saved it, so a value with bytes from 0x80 is not an error. A byte that the chosen encoding does not define is.</summary>
+    public static string Text(ReadOnlySpan<byte> d, long at, int length, Encoding? encoding, int? codePage = null)
     {
         Need(at, length, d.Length, "string");
-        var span = d.Slice((int)at, length);
-        int nul = span.IndexOf((byte)0);
-        if (nul >= 0) span = span[..nul];
+        var field = d.Slice((int)at, length);
+        int nul = field.IndexOf((byte)0);
+        if (nul >= 0) field = field[..nul];
+        if (field.IsEmpty) return string.Empty;
         try
         {
-            return StrictUtf8.GetString(span);
+            return TextDecoding.DecodeUnmarked(field, encoding, out _, codePage);
         }
-        catch (DecoderFallbackException e)
+        // The offsets of TextDecoding count from the value; the offsets of a row count from the body.
+        catch (InvalidDataException e) when (e.Data[FormatError.OffsetKey] is long inner)
         {
-            throw FormatError.At("invalid UTF-8 string", at + Math.Max(0, e.Index), e);
+            throw FormatError.At(FormatError.WithoutOffset(e.Message), at + inner, e.InnerException ?? e);
         }
     }
 }

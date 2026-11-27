@@ -5,7 +5,8 @@ namespace TdbIO.Internal;
 
 /// <summary>The rows of a section as a fixed-stride view over the data. A section can hold millions of rows, so nothing
 /// is stored per row; the walk has already checked every row.</summary>
-internal sealed class RowList(ReadOnlyMemory<byte> data, long rowsOffset, int count, int rowSize, SectionMode mode)
+internal sealed class RowList(ReadOnlyMemory<byte> data, long rowsOffset, int count, int rowSize, SectionMode mode,
+    RowText? text = null)
     : IReadOnlyList<TableRow>
 {
     public int Count => count;
@@ -29,7 +30,10 @@ internal sealed class RowList(ReadOnlyMemory<byte> data, long rowsOffset, int co
                 a = BinaryPrimitives.ReadUInt32LittleEndian(tail);
                 b = BinaryPrimitives.ReadUInt32LittleEndian(tail[4..]);
             }
-            return new TableRow(offset, data.Span[(int)offset], data.Slice((int)offset + 1, rowSize), a, b);
+            return new TableRow(offset, data.Span[(int)offset], data.Slice((int)offset + 1, rowSize), a, b)
+            {
+                Text = text,
+            };
         }
     }
 

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using TdbIO;
+using TdbIO.Internal;
 
 namespace TdbIO.Internal.Export;
 
@@ -8,6 +9,10 @@ namespace TdbIO.Internal.Export;
 /// Exports <see cref="TeklaModel"/> to Industry Foundation Classes (IFC2x3 / IFC4)
 /// in ISO 10303-21 STEP physical file format.
 /// </summary>
+/// <remarks>
+/// Target-format output, not native decoding: this folder is excluded from the native engine build
+/// (<c>BuildNativeCoreOnly</c>), which the scene adapter is compiled against.
+/// </remarks>
 internal static class IfcExporter
 {
     private const string DegreeInRadians = "0.017453292519943278";

@@ -34,6 +34,41 @@ function New-Zip([string]$SourceDir, [string]$ZipPath) {
     Compress-Archive -Path (Join-Path $SourceDir '*') -DestinationPath $ZipPath
 }
 
+# Throws unless the TdbIO.Scene nuspec depends on TdbIO exactly at $Version and on a released IOScene, with bounds nuget.org accepts.
+function Assert-SceneDependencies([xml]$Nuspec, [string]$Version) {
+    $dependencies = @($Nuspec.SelectNodes("//*[local-name()='dependency']"))
+    # (a) Guards the PinProjectReferencesExactly target, which hooks a private NuGet target and would fail silently if an SDK renamed it.
+    $engine = @($dependencies | Where-Object { $_.GetAttribute('id') -eq 'TdbIO' })
+    if ($engine.Count -eq 0) { throw "TdbIO.Scene has no dependency on TdbIO" }
+    foreach ($dependency in $engine) {
+        if ($dependency.GetAttribute('version') -cne "[$Version]") {
+            throw "TdbIO.Scene depends on TdbIO $($dependency.GetAttribute('version')), expected exactly [$Version]"
+        }
+    }
+    # (b) Replaces the NU5104 check that the IOScene range switches off: no adapter built on a preview contract reaches nuget.org.
+    $scene = @($dependencies | Where-Object { $_.GetAttribute('id') -eq 'IOScene' })
+    if ($scene.Count -eq 0) { throw "TdbIO.Scene has no dependency on IOScene" }
+    foreach ($dependency in $scene) {
+        $range = $dependency.GetAttribute('version')
+        $lower = $range.TrimStart('[', '(').Split(',')[0].Trim()
+        if ($lower -eq '' -or $lower.Contains('-')) {
+            throw "TdbIO.Scene depends on IOScene '$range', whose lower bound is missing or a preview; release on a published IOScene 0.1.0 or later"
+        }
+    }
+    # (c) nuget.org refuses a dependency bound with metadata, or one whose prerelease label has one part and does not start
+    # with a letter (NuGetGallery ManifestValidator.ValidateDependencyVersion); dotnet pack accepts both, so only the push would fail.
+    foreach ($dependency in $dependencies) {
+        $range = $dependency.GetAttribute('version')
+        foreach ($bound in $range.Trim('[', ']', '(', ')').Split(',')) {
+            $bound = $bound.Trim()
+            $label = if ($bound.Contains('-')) { $bound.Substring($bound.IndexOf('-') + 1) } else { '' }
+            if ($bound.Contains('+') -or ($label -ne '' -and -not $label.Contains('.') -and $label -notmatch '^[a-z][0-9a-z-]*$')) {
+                throw "TdbIO.Scene depends on $($dependency.GetAttribute('id')) '$range', whose bound '$bound' nuget.org refuses"
+            }
+        }
+    }
+}
+
 # 1. TdbIO Library assemblies (net8.0 and net10.0 with all dependencies)
 Write-Host "Publishing TdbIO library..."
 $libStage = Join-Path $stage 'lib'
@@ -75,6 +110,18 @@ New-Zip $cli10Stage (Join-Path $Output "TdbIO-Cli-$version-net10.0.zip")
 # 4. NuGet packages
 Write-Host "Packing NuGet packages..."
 Invoke-DotNet pack (Join-Path $root 'TdbIO.slnx') -c Release --no-build -o $Output
+
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$scenePackage = [System.IO.Compression.ZipFile]::OpenRead((Join-Path $Output "TdbIO.Scene.$version.nupkg"))
+try {
+    $entry = $scenePackage.GetEntry('TdbIO.Scene.nuspec')
+    if (-not $entry) { throw "TdbIO.Scene.$version.nupkg has no TdbIO.Scene.nuspec" }
+    $reader = New-Object System.IO.StreamReader($entry.Open())
+    try { $nuspec = [xml]$reader.ReadToEnd() } finally { $reader.Dispose() }
+} finally {
+    $scenePackage.Dispose()
+}
+Assert-SceneDependencies $nuspec $version
 
 # 5. Source code archive
 Write-Host "Creating source code archive..."

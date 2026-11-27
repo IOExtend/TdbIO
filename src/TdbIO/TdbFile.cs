@@ -93,12 +93,12 @@ public static class TdbFile
             byte[] payload = Gzip.Unpack(InputReader.ReadAll(stream, cap, head, "MaxUnpackedLength"), cap);
             return KindDetector.FromUnpacked(payload) switch
             {
-                TdbFileKind.Db1 => Db1Document.Create(payload),
+                TdbFileKind.Db1 => Db1Document.Create(payload, options.TextEncoding),
                 TdbFileKind.Db2 => Db2Document.Create(payload),
                 TdbFileKind.Drawing => throw new NotSupportedException("drawing files are recognised but not supported"),
                 TdbFileKind.IdRanges => IdRangeDocument.Create(payload),
                 TdbFileKind.GuidMapper => GuidMapperDocument.Create(payload),
-                TdbFileKind.Dbv => DbvDocument.Create(payload),
+                TdbFileKind.Dbv => DbvDocument.Create(payload, options.TextEncoding),
                 _ => throw NotRecognised(),
             };
         }

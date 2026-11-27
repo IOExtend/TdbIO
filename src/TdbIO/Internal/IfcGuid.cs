@@ -1,13 +1,17 @@
 using System.Security.Cryptography;
 using System.Text;
 
-namespace TdbIO.Internal.Export;
+namespace TdbIO.Internal;
 
 /// <summary>
 /// IFC GlobalId encoding: 128-bit GUID to 22-character base64-like string.
 /// Uses IFC-specific alphabet: 0-9, A-Z, a-z, _, $.
 /// Algorithm standardized by buildingSMART IFC specification.
 /// </summary>
+/// <remarks>
+/// This is part of the engine's native identity model (<see cref="ModelObject.IfcGuid"/> is read by the scene
+/// adapter), so it stays in the native build; only the IFC file output is excluded from it.
+/// </remarks>
 internal static class IfcGuid
 {
     private const string Chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_$";

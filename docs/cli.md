@@ -33,7 +33,7 @@ from its extension (reports, which have no signature, are recognised by the `.xs
 | Option | Commands | Effect |
 | --- | --- | --- |
 | `--json` | all | Write one indented JSON object (UTF-8) instead of text. |
-| `--encoding <name>` | `info` | Read a template or report with this encoding instead of detecting it: `ascii`, `utf-8`, `cp1251` or `cp1252`. The encoding is strict: a byte it does not define is an input error. Given for any other kind of file, it is a usage error. |
+| `--encoding <name>` | `info`, `export` | Read a template or report, or the text values of the table rows of a model database (`.db1`) or DBV@ file, with this encoding instead of detecting it: `ascii`, `utf-8`, `cp1251` or `cp1252`. Give it for a model saved with a Western European code page, which the detection reads as `cp1251`. The encoding is strict: a byte it does not define is an input error. Given for any other kind of file, it is a usage error. |
 
 An option given twice is a usage error.
 
@@ -42,7 +42,7 @@ An option given twice is a usage error.
 | Code | Name | Meaning |
 | --- | --- | --- |
 | 0 | done | The command finished and its output was written. Warnings do not change the code. |
-| 1 | usage | The command line is wrong: no command, an unknown command or option, no file, an empty file name, an extra argument, an option repeated, `--encoding` without a value or with an unknown one, or `--encoding` for a file that is not a template or report. Two lines on standard error: `tdbio: <problem>` and `Run 'tdbio --help' for usage.` |
+| 1 | usage | The command line is wrong: no command, an unknown command or option, no file, an empty file name, an extra argument, an option repeated, `--encoding` without a value or with an unknown one, or `--encoding` for a file that is not a template, report, model database or DBV@ file. Two lines on standard error: `tdbio: <problem>` and `Run 'tdbio --help' for usage.` |
 | 2 | input | The file cannot be used: it does not exist or cannot be read, is not recognised, is cut or malformed, is over a limit, is not supported (a drawing file, UTF-16 text), or is of a kind the command does not handle (for example `tables` on a `.nc1` file). One line on standard error, `tdbio: <problem>`, no stack trace. |
 
 The whole output is built before anything is written, so a failing command writes nothing to standard output. A

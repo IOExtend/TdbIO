@@ -30,7 +30,9 @@ public partial class VectorTests
 
             var handled = new List<string> { "sections" };
             foreach (var property in expected.EnumerateObject())
-                if (CheckTableRowValues(name, property, sections)) handled.Add(property.Name);
+                if (CheckTableRowValues(name, property, sections) || CheckDecodedRowText(name, property, sections))
+                    handled.Add(property.Name);
+            CheckTypedDecoderText(name, expected, sections);
             if (expected.TryGetProperty("ends_at_eof", out var eof))
             {
                 Assert.True(eof.GetBoolean() == (sections[^1].End == data.Length), $"{name}: ends_at_eof");
@@ -67,6 +69,42 @@ public partial class VectorTests
             Assert.True(rows[i].GetProperty("marker").GetInt32() == row.Marker, $"{at}: row {i} marker");
             Assert.True(rows[i].GetProperty("a").GetInt64() == row.A, $"{at}: row {i} a");
             Assert.True(rows[i].GetProperty("b").GetInt64() == row.B, $"{at}: row {i} b");
+        }
+    }
+
+    // decoded_text_at_N_width_M: the text of the field at N of every row, decoded as the library decodes it: ASCII, UTF-8,
+    // else code page 1251 or 1252 chosen once for the file.
+    private static bool CheckDecodedRowText(string name, JsonProperty property, IReadOnlyList<TableSection> sections)
+    {
+        if (TableJson.DecodedTextKey.Match(property.Name) is not { Success: true } m) return false;
+        int at = int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture);
+        int width = int.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture);
+        var rows = Assert.Single(sections).Rows;
+        var values = property.Value.EnumerateArray().ToList();
+        Assert.True(values.Count == rows.Count, $"{name}: {property.Name} count");
+        for (int i = 0; i < values.Count; i++)
+        {
+            string actual = Bytes.Text(rows[i].Body.Span, at, width, rows[i].TextEncoding, rows[i].Text?.CodePage);
+            Assert.True(string.Equals(values[i].GetString(), actual, StringComparison.Ordinal), $"{name}: {property.Name} row {i}");
+        }
+        return true;
+    }
+
+    // A section with the key and row size of a typed decoder: the text of the decoded rows equals decoded_text_*.
+    private static void CheckTypedDecoderText(string name, JsonElement expected, IReadOnlyList<TableSection> sections)
+    {
+        if (!expected.TryGetProperty("decoded_text_at_8_width_21", out var names)
+            || !expected.TryGetProperty("decoded_text_at_29_width_91", out var values))
+            return;
+        TableSection section = Assert.Single(sections, s => s.Key == StrAttrAttrRow.TableKey && s.RowSize == StrAttrAttrRow.ExpectedRowSize);
+        var rows = section.AsStrAttrAttrs();
+        var expectedNames = names.EnumerateArray().ToList();
+        var expectedValues = values.EnumerateArray().ToList();
+        Assert.True(rows.Count == expectedNames.Count && rows.Count == expectedValues.Count, $"{name}: decoded rows count");
+        for (int i = 0; i < rows.Count; i++)
+        {
+            Assert.True(string.Equals(expectedNames[i].GetString(), rows[i].Name, StringComparison.Ordinal), $"{name}: decoded name row {i}");
+            Assert.True(string.Equals(expectedValues[i].GetString(), rows[i].Value, StringComparison.Ordinal), $"{name}: decoded value row {i}");
         }
     }
 
@@ -458,6 +496,7 @@ internal static class TableJson
     public const long UnpackLimit = 1L << 30;
 
     public static readonly Regex RowValueKey = new(@"^(rows|row0|ord(\d+)_row0)_(text|i32)_at_(\d+)$", RegexOptions.CultureInvariant);
+    public static readonly Regex DecodedTextKey = new(@"^decoded_text_at_(\d+)_width_(\d+)$", RegexOptions.CultureInvariant);
     public static readonly Regex F64ListKey = new(@"^rows_f64_at_(\d+(?:_\d+)+)$", RegexOptions.CultureInvariant);
     public static readonly Regex F64RangeKey = new(@"^rows_f64_at_(\d+)_to_(\d+)$", RegexOptions.CultureInvariant);
 

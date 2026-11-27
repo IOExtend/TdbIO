@@ -1,11 +1,10 @@
+using System.Globalization;
 using System.Text;
 
 namespace TdbIO.Internal;
 
 internal static class ModelBuilder
 {
-    private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
-
     public static TeklaModel Build(Db1Document doc)
     {
         ArgumentNullException.ThrowIfNull(doc);
@@ -51,6 +50,9 @@ internal static class ModelBuilder
             if (sp.NextId > 0) childChunkIds.Add(sp.NextId);
         }
 
+        // The chunks of one chain are joined as bytes and decoded as one text value, with the rule for a row value and the
+        // text rule of the file, so a value split over chunks is decoded whole whatever its encoding.
+        RowText? poolText = FindSection(sections, StringPoolRow.TableKey, StringPoolRow.ExpectedRowSize)?.Text;
         var stringPool = new Dictionary<int, string>(strPoolRows.Count);
         var rawBuffer = new List<byte>(128);
         var visitedInCurrentChain = new HashSet<int>();
@@ -91,11 +93,15 @@ internal static class ModelBuilder
 
             try
             {
-                stringPool[head.Id] = StrictUtf8.GetString(rawBuffer.ToArray());
+                stringPool[head.Id] = TextDecoding.DecodeUnmarked(rawBuffer.ToArray(), poolText?.Encoding, out _, poolText?.CodePage);
             }
-            catch (DecoderFallbackException e)
+            // The offset of TextDecoding counts from the start of the joined chain, which has no offset in the file: name it
+            // as a byte of the chain, so that it is not read as an offset of the file.
+            catch (InvalidDataException e) when (e.Data[FormatError.OffsetKey] is long inner)
             {
-                throw FormatError.At("Invalid UTF-8 sequence in string pool chain", 0, e);
+                throw new InvalidDataException(string.Create(CultureInfo.InvariantCulture,
+                    $"string pool chain {head.Id}: {FormatError.WithoutOffset(e.Message)} at byte {inner} of the joined chunks"),
+                    e.InnerException ?? e);
             }
         }
 

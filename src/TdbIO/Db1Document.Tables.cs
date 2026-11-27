@@ -11,7 +11,7 @@ public sealed partial class Db1Document
     /// <exception cref="InvalidDataException">A section is malformed or cut, a section without a key follows one with a key,
     /// or bytes are left after the last section. The message names the section and the offset.</exception>
     public IReadOnlyList<TableSection> ReadTables() =>
-        SectionWalker.Walk(Payload, SectionWalker.FindFirstSection(Payload.Span), 0, SectionMode.Db1, null);
+        SectionWalker.Walk(Payload, SectionWalker.FindFirstSection(Payload.Span), 0, SectionMode.Db1, null, _textEncoding);
 
     /// <summary>Decodes the table sections into a connected, read-only object model of parts, assemblies, bolts, welds and attributes.</summary>
     /// <returns>A new <see cref="TeklaModel"/> representing the decoded model object graph.</returns>

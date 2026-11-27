@@ -31,20 +31,9 @@ jobs:
           if ($env:GITHUB_REF_NAME -cne "v$($version.Trim())") {
             throw "The release tag must match the package version v$($version.Trim())."
           }
-      - run: dotnet restore TdbIO.slnx
-      - run: dotnet build TdbIO.slnx -c Release --no-restore
-      - run: dotnet test TdbIO.slnx -c Release --no-build
-      - name: Pack release
+      # Before anything is published: a commit without a changelog section for the version fails here.
+      - name: Extract release notes
         shell: pwsh
-        run: ./tools/pack-release.ps1
-      - uses: actions/upload-artifact@v7
-        with:
-          name: packages
-          path: artifacts/*
-      - name: Create release
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $version = $env:GITHUB_REF_NAME.Substring(1)
           $changelog = Get-Content -LiteralPath CHANGELOG.md -Encoding utf8
@@ -53,9 +42,19 @@ jobs:
           $notes = @()
           for ($i = $start + 1; $i -lt $changelog.Count -and -not $changelog[$i].StartsWith('## ['); $i++) { $notes += $changelog[$i] }
           $notes | Set-Content -LiteralPath release-notes.md -Encoding utf8
-          $files = @(Get-ChildItem artifacts -File | ForEach-Object { $_.FullName })
-          gh release create $env:GITHUB_REF_NAME --title $env:GITHUB_REF_NAME --notes-file release-notes.md @files
-          if ($LASTEXITCODE -ne 0) { throw "gh release create failed with exit code $LASTEXITCODE" }
+      - run: dotnet restore TdbIO.slnx
+      - run: dotnet build TdbIO.slnx -c Release --no-restore
+      - run: dotnet test TdbIO.slnx -c Release --no-build
+      # The script also checks the package dependencies of the scene adapter before anything is pushed.
+      - name: Pack release
+        shell: pwsh
+        run: ./tools/pack-release.ps1
+      - uses: actions/upload-artifact@v7
+        with:
+          name: packages
+          path: artifacts/*
+      # The push comes before the GitHub release: a refused first publication of a package id can be fixed and the
+      # job run again, because --skip-duplicate makes the push repeatable and no release exists yet.
       # Trusted publishing: the NuGet policy for this repository and workflow file exchanges the GitHub OIDC token for a short-lived key.
       - uses: NuGet/login@v1
         id: nuget-login
@@ -67,4 +66,32 @@ jobs:
           foreach ($package in Get-ChildItem artifacts -Filter *.nupkg) {
             dotnet nuget push $package.FullName --api-key '${{ steps.nuget-login.outputs.NUGET_API_KEY }}' --source https://api.nuget.org/v3/index.json --skip-duplicate
             if ($LASTEXITCODE -ne 0) { throw "dotnet nuget push failed for $($package.Name) with exit code $LASTEXITCODE" }
+          }
+      # A release left by an earlier run of the same tag is updated, so a re-run does not fail on creating it.
+      - name: Create or update release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $files = @(Get-ChildItem artifacts -File | ForEach-Object { $_.FullName })
+          $tagName = $env:GITHUB_REF_NAME
+          # A version with a hyphen is a prerelease.
+          $flags = @()
+          if ($tagName.Contains('-')) { $flags += '--prerelease' }
+
+          # Only a missing release goes on to create one; any other failure of the lookup (auth, network) stops here.
+          $view = gh release view $tagName 2>&1 | Out-String
+          if ($LASTEXITCODE -ne 0 -and $view -notmatch 'release not found') {
+            throw "gh release view failed with exit code ${LASTEXITCODE}: $view"
+          }
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Updating existing release $tagName..."
+            gh release edit $tagName --notes-file release-notes.md @flags
+            if ($LASTEXITCODE -ne 0) { throw "gh release edit failed with exit code $LASTEXITCODE" }
+            gh release upload $tagName @files --clobber
+            if ($LASTEXITCODE -ne 0) { throw "gh release upload failed with exit code $LASTEXITCODE" }
+          } else {
+            Write-Host "Creating release $tagName..."
+            gh release create $tagName --verify-tag --title $tagName --notes-file release-notes.md @flags @files
+            if ($LASTEXITCODE -ne 0) { throw "gh release create failed with exit code $LASTEXITCODE" }
           }

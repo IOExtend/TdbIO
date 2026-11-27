@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace TdbIO;
 
 /// <summary>One row of a <see cref="TableSection"/>: a marker byte, the raw body and two trailing numbers representing
@@ -24,6 +26,26 @@ public readonly record struct TableRow(long Offset, byte Marker, ReadOnlyMemory<
 
     /// <summary>True if this row has the deleted or superseded marker (<c>0x0C</c>) in <c>.db1</c> files.</summary>
     public bool IsDeleted => Marker == 0x0C;
+
+    /// <summary>The encoding the typed decoders (<see cref="AsPart"/>, <see cref="AsPartAttr"/> and the others) read the
+    /// text values of this row with: the <see cref="TdbReadOptions.TextEncoding"/> the file was opened with, or null to
+    /// choose it from the bytes. Each value is then ASCII or UTF-8 when its bytes are, else code page 1251 or 1252, chosen
+    /// once for the whole file from all such values of the typed tables. The text of a model is single-byte in the code
+    /// page of the system that saved it, so a value with bytes from 0x80 is not an error; a byte the chosen encoding does
+    /// not define is.</summary>
+    public Encoding? TextEncoding => Text?.Encoding;
+
+    /// <summary>The text rule of the file the row was read from; null for a row built by a caller.</summary>
+    internal Internal.RowText? Text { get; init; }
+
+    /// <summary>True when both rows have the same offset, marker, body, numbers after the body and text rule. Each read
+    /// of the sections builds its own text rule, so the rule is compared by its values, not by reference.</summary>
+    public bool Equals(TableRow other) =>
+        Offset == other.Offset && Marker == other.Marker && Body.Equals(other.Body) && A == other.A && B == other.B
+        && Equals(TextEncoding, other.TextEncoding) && Text?.CodePage == other.Text?.CodePage;
+
+    /// <inheritdoc/>
+    public override int GetHashCode() => HashCode.Combine(Offset, Marker, Body, A, B, TextEncoding, Text?.CodePage);
 
     /// <summary>Decodes the row body as an <see cref="ObjectRow"/> (table 1, size 72).</summary>
     public ObjectRow AsObject() => ObjectRow.Decode(this);
