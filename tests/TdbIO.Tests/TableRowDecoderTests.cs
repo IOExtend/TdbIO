@@ -82,16 +82,33 @@ public class TableRowDecoderTests
     }
 
     [Fact]
-    public void AssemblyRowWithInvalidUtf8SequenceThrowsInvalidDataException()
+    public void AssemblyRowDecodesTheSingleByteTextOfTheSavingSystem()
     {
+        // The text of a model is single-byte in the code page of the system that saved it, here 1251: not an error.
+        // RowTextTests cover the choice of the encoding.
         var row = MakeRow(AssemblyRow.ExpectedRowSize, span =>
         {
             BinaryPrimitives.WriteInt32LittleEndian(span[0..], 10);
-            span[20] = 0xFF;
+            CodePagesEncodingProvider.Instance.GetEncoding(1251)!.GetBytes("Столб").CopyTo(span[20..]);
+        });
+
+        Assert.Equal("Столб", row.AsAssembly().Name);
+        Assert.Equal("Столб", AssemblyRow.Decode(row.Body.Span).Name);
+    }
+
+    [Fact]
+    public void AssemblyRowTextWithAnUndefinedByteIsAnErrorAtItsOffset()
+    {
+        // One high byte of the upper half of two chooses code page 1251, which does not define 0x98.
+        var row = MakeRow(AssemblyRow.ExpectedRowSize, span =>
+        {
+            span[20] = 0xC0;
+            span[21] = 0x98;
         });
 
         var e = Assert.Throws<InvalidDataException>(() => row.AsAssembly());
-        Assert.Equal(20, e.Offset);
+        Assert.Equal(21, e.Offset);
+        Assert.Contains("cp1251", e.Message);
     }
 
     [Fact]

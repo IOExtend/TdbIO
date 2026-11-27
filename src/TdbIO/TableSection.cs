@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace TdbIO;
 
 /// <summary>A section of fixed-size rows, as found in <c>.db1</c> files (<see cref="Db1Document.ReadTables"/>) and in
@@ -6,7 +8,7 @@ namespace TdbIO;
 public sealed class TableSection
 {
     internal TableSection(int ordinal, long offset, long end, int? key, int rowSize, IReadOnlyList<uint> descriptors,
-        long rowsOffset, IReadOnlyList<TableRow> rows)
+        long rowsOffset, IReadOnlyList<TableRow> rows, Encoding? textEncoding = null)
     {
         Ordinal = ordinal;
         Offset = offset;
@@ -16,6 +18,7 @@ public sealed class TableSection
         Descriptors = descriptors;
         RowsOffset = rowsOffset;
         Rows = rows;
+        TextEncoding = textEncoding;
     }
 
     /// <summary>The position of the section in its file, from 0.</summary>
@@ -46,6 +49,10 @@ public sealed class TableSection
 
     /// <summary>The rows in file order. The list is a view over the data: each row is built when it is read.</summary>
     public IReadOnlyList<TableRow> Rows { get; }
+
+    /// <summary>The encoding the typed decoders read the text values of the rows with; see
+    /// <see cref="TableRow.TextEncoding"/>.</summary>
+    internal Encoding? TextEncoding { get; }
 
     private IReadOnlyList<T> DecodeRows<T>(int expectedSize, Func<TableRow, T> decode)
     {

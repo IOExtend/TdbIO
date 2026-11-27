@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 
 namespace TdbIO.Internal;
 
@@ -51,9 +52,10 @@ internal static class SectionWalker
     }
 
     /// <summary>Reads sections from <paramref name="start"/> to the end of <paramref name="data"/>, which they must fill
-    /// exactly. In <see cref="SectionMode.Db1"/> a section without a key after one with a key is an error.</summary>
+    /// exactly. In <see cref="SectionMode.Db1"/> a section without a key after one with a key is an error.
+    /// <paramref name="textEncoding"/> is kept for the typed decoders of the rows (<see cref="TableRow.TextEncoding"/>).</summary>
     public static IReadOnlyList<TableSection> Walk(ReadOnlyMemory<byte> data, int start, int firstOrdinal, SectionMode mode,
-        List<string>? warnings)
+        List<string>? warnings, Encoding? textEncoding = null)
     {
         var sections = new List<TableSection>();
         long p = start;
@@ -61,7 +63,7 @@ internal static class SectionWalker
         bool keyedSeen = false;
         while (p < data.Length)
         {
-            var section = ReadOne(data, checked((int)p), ordinal, mode, warnings);
+            var section = ReadOne(data, checked((int)p), ordinal, mode, warnings, textEncoding);
             if (section.Key is null && keyedSeen)
                 throw Error(ordinal, "a section without a key follows a section with a key", section.Offset);
             keyedSeen |= section.Key is not null;
@@ -75,7 +77,8 @@ internal static class SectionWalker
     }
 
     /// <summary>Reads the one section that starts at <paramref name="offset"/>.</summary>
-    public static TableSection ReadOne(ReadOnlyMemory<byte> data, int offset, int ordinal, SectionMode mode, List<string>? warnings)
+    public static TableSection ReadOne(ReadOnlyMemory<byte> data, int offset, int ordinal, SectionMode mode, List<string>? warnings,
+        Encoding? textEncoding = null)
     {
         ReadOnlySpan<byte> d = data.Span;
         long length = d.Length;
@@ -161,7 +164,7 @@ internal static class SectionWalker
         }
 
         return new TableSection(ordinal, offset, p, key, rowSize, Array.AsReadOnly(descriptors), rowsOffset,
-            new RowList(data, rowsOffset, rows, rowSize, mode));
+            new RowList(data, rowsOffset, rows, rowSize, mode, textEncoding), textEncoding);
     }
 
     private static void Need(int ordinal, long at, long count, long length, string what)

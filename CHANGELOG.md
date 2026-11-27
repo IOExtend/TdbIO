@@ -20,6 +20,8 @@ API between minor releases.
 - The `TdbIO.Scene` package: `TdbSceneReader` turns the object model into an IOScene scene document in metres, and
   `tdbio export model.db1 model.scene.json --scene-json` writes it.
 - A standalone HTML viewer of the scene: `tdbio export model.db1 viewer.html`.
+- `TableRow.TextEncoding` and `Decode(ReadOnlySpan<byte>, Encoding)` on the decoded row types with text: the text values
+  of table rows can be read in a given encoding. `TdbReadOptions.TextEncoding` now applies to them too.
 - Tests of the adapter in `TdbIO.Scene.Tests`, and test runs on Linux and macOS in CI.
 - `docs/versions.md`: differences between Tekla Structures versions.
 
@@ -40,6 +42,9 @@ API between minor releases.
 
 ### Fixed
 
+- The text values of table rows are no longer required to be UTF-8. They are single-byte in the code page of the system
+  that saved the model, so `ReadModel()` and `tdbio export` failed with `invalid UTF-8 string` on every model saved on a
+  non-English system. Each value is now read as ASCII, UTF-8, code page 1251 or 1252, in that order.
 - `tdbio` no longer fails with an unhandled `ArgumentException` on a path of blanks, and `tdbio info` no longer fails as
   a whole when one text section of a model database is broken.
 - A template reports the offset of an error as a character offset of its text, and tuple nesting is limited like block

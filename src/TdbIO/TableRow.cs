@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace TdbIO;
 
 /// <summary>One row of a <see cref="TableSection"/>: a marker byte, the raw body and two trailing numbers representing
@@ -24,6 +26,13 @@ public readonly record struct TableRow(long Offset, byte Marker, ReadOnlyMemory<
 
     /// <summary>True if this row has the deleted or superseded marker (<c>0x0C</c>) in <c>.db1</c> files.</summary>
     public bool IsDeleted => Marker == 0x0C;
+
+    /// <summary>The encoding the typed decoders (<see cref="AsPart"/>, <see cref="AsPartAttr"/> and the others) read the
+    /// text values of this row with: the <see cref="TdbReadOptions.TextEncoding"/> the file was opened with, or null to
+    /// choose it from the bytes of each value (ASCII, UTF-8, then code page 1251 or 1252). The text of a model is
+    /// single-byte in the code page of the system that saved it, so a value with bytes from 0x80 is not an error; a byte
+    /// the chosen encoding does not define is.</summary>
+    public Encoding? TextEncoding { get; internal init; }
 
     /// <summary>Decodes the row body as an <see cref="ObjectRow"/> (table 1, size 72).</summary>
     public ObjectRow AsObject() => ObjectRow.Decode(this);

@@ -4,8 +4,6 @@ namespace TdbIO.Internal;
 
 internal static class ModelBuilder
 {
-    private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
-
     public static TeklaModel Build(Db1Document doc)
     {
         ArgumentNullException.ThrowIfNull(doc);
@@ -51,6 +49,9 @@ internal static class ModelBuilder
             if (sp.NextId > 0) childChunkIds.Add(sp.NextId);
         }
 
+        // The chunks of one chain are joined as bytes and decoded as one text value, with the rule for a row value and the
+        // encoding of the pool section, so a value split over chunks is decoded whole whatever its encoding.
+        Encoding? poolTextEncoding = FindSection(sections, StringPoolRow.TableKey, StringPoolRow.ExpectedRowSize)?.TextEncoding;
         var stringPool = new Dictionary<int, string>(strPoolRows.Count);
         var rawBuffer = new List<byte>(128);
         var visitedInCurrentChain = new HashSet<int>();
@@ -91,11 +92,12 @@ internal static class ModelBuilder
 
             try
             {
-                stringPool[head.Id] = StrictUtf8.GetString(rawBuffer.ToArray());
+                stringPool[head.Id] = TextDecoding.DecodeUnmarked(rawBuffer.ToArray(), poolTextEncoding, out _);
             }
-            catch (DecoderFallbackException e)
+            // The offset of TextDecoding counts from the start of the joined chain; a joined chain has no offset in the file.
+            catch (InvalidDataException e)
             {
-                throw FormatError.At("Invalid UTF-8 sequence in string pool chain", 0, e);
+                throw new InvalidDataException($"string pool chain {head.Id}: {e.Message}", e.InnerException ?? e);
             }
         }
 

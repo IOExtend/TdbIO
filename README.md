@@ -209,7 +209,10 @@ Values that differ from the ones always seen are kept and reported in `Warnings`
 - Part geometry is not decoded from the file. The IFC output and the scene adapter draw each straight part as a box
   between its start and end point, with the width and height estimated from the profile name (150 mm × 150 mm when the
   name gives none). These meshes are not Tekla solids and are not made for clash detection or exact measurement.
-- The text of model databases is given as bytes: the encoding of bytes from 0x80 is not known.
+- The text chains of model databases are given as bytes. The text values of decoded rows are single-byte in the code
+  page of the system that saved the model: ASCII, UTF-8, then code page 1251 or 1252 is chosen for each value, and
+  `TdbReadOptions.TextEncoding` sets one for the whole file. The choice between the two pages cannot tell Cyrillic from
+  Latin letters with diacritics, so give the encoding for a model saved with a Western European page.
 - Drawing files are recognised but not read. Of `history.db` only the header is read.
 - Only gzip data with one member, header flags 0 and nothing after the trailer is accepted.
 - Templates and reports in UTF-16 are not supported. DSTV NC files must be ASCII with CR LF line breaks.

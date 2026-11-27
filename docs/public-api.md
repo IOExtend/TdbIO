@@ -18,7 +18,7 @@ from several threads.
 | --- | --- |
 | `TdbFile` | `DetectKind(path)` and `DetectKind(stream, fileName)` tell the kind of a file from its first bytes (at most 64 KiB) without reading it whole; they never throw for the content and give `Unknown` for data that is short, cut or not recognised. `Open(path, options)` and `Open(stream, fileName, options)` read the file into the document of its kind. The stream need not be seekable and is not disposed; `fileName` is used only to recognise reports. |
 | `TdbFileKind` | `Unknown`, `Db1`, `Db2`, `Drawing`, `IdRanges`, `GuidMapper`, `Dbv`, `History`, `Nc1`, `Template`, `Report`. |
-| `TdbReadOptions` | `MaxUnpackedLength`: the most bytes read into memory, the unpacked size of gzip data or the size of an uncompressed file (default 1 GiB, valid range 1 to `Array.MaxLength`). `TextEncoding`: the encoding of templates and reports, or null to detect it. `Default` gives a new instance with the defaults. |
+| `TdbReadOptions` | `MaxUnpackedLength`: the most bytes read into memory, the unpacked size of gzip data or the size of an uncompressed file (default 1 GiB, valid range 1 to `Array.MaxLength`). `TextEncoding`: the encoding of templates and reports and of the text values in table rows, or null to choose it from the bytes. `Default` gives a new instance with the defaults. |
 | `TdbDocument` | The base class of every document: `Kind` and `Warnings`. |
 
 The kind of each document:
@@ -81,7 +81,7 @@ offset or line number. A warning never contains text from the file. Warnings are
 | Type | Use |
 | --- | --- |
 | `TableSection` | A section of fixed-size rows, from `Db1Document.ReadTables()` or `DbvDocument.Sections`. `Ordinal`, `Offset`, `End`, `Key` (schema table number in `.db1`, else null), `RowSize`, `Descriptors` (primary and secondary index specifications), `RowsOffset` and `Rows`. `Rows` is a view over the data: a row is built when it is read. Typed bulk decoders (`AsObjects()`, `AsParts()`, `AsPoints()`, etc.) decode all rows into typed record structs. |
-| `TableRow` | `Offset` (of the marker byte), `Marker` (0x04 active, 0x0C deleted/superseded in `.db1`), `Body` (`RowSize` raw bytes), `A` / `CreationTimeId` (creation transaction TimeId) and `B` / `DeletionTimeId` (deletion or superseding transaction TimeId). `IsActive` and `IsDeleted` inspect the marker. Typed decoders (`AsObject()`, `AsPart()`, `AsPoint()`, etc.) decode the row body into typed record structs. |
+| `TableRow` | `Offset` (of the marker byte), `Marker` (0x04 active, 0x0C deleted/superseded in `.db1`), `Body` (`RowSize` raw bytes), `A` / `CreationTimeId` (creation transaction TimeId) and `B` / `DeletionTimeId` (deletion or superseding transaction TimeId). `IsActive` and `IsDeleted` inspect the marker. `TextEncoding`: the encoding the typed decoders read the text values with, the `TdbReadOptions.TextEncoding` the file was opened with or null. Typed decoders (`AsObject()`, `AsPart()`, `AsPoint()`, etc.) decode the row body into typed record structs. |
 | `DbvDocument` | A DBV@ file: `Name`, `DomainId` (`Prologue[1]`), `Generation` (`ListHeader[3]`), `BaseOffset` (`B`), `EventLevel` (`C`), `CurrentOffset` (`T[1]`), `LastEventOffset` (`T[4]`), `Prologue`, `ListHeader`, `GuidRecords`, `B`, `C`, `L1`, `L2`, `T`, `C9Records`, `Sections` and `Payload`. The raw numbers are preserved; named aliases identify the domain, generation and event offsets. |
 | `DbvGuidRecord` | `Value` (raw), `Index` (1-based, checked against the position) and `Id`. |
 | `DbvC9Record` | A record that starts with `C9 C0 CE DB`: four raw numbers `R0` to `R3`. |
@@ -117,6 +117,12 @@ Typed record structs decoded from the row bodies of the most common model databa
 | `BoltHoleRow` | 140 | 48 | `BoltId`, `No`, `PartId`, `PointZ`, `Length`, `LongHoleDir`, `LongHoleType`, `ShorteningLength`. |
 | `ObjectPhaseRow` | 141 | 8 | `ObjectId`, `PhaseNumber`. |
 | `BoltHolePointsRow` | 142 | 60 | `BoltId`, intermediate coordinates `IntPoint1X`, `IntPoint1Y`, `IntPoint1Z`, `IntPoint2X`, `IntPoint2Y`, `IntPoint2Z`, `NumHoles`. |
+
+The text values of a decoded row are zero-terminated and single-byte in the code page of the system that saved the
+model, and nothing in the file names that page. Without a given encoding each value is read by the order for templates
+and reports without its byte order mark steps: `ascii`, `utf-8`, then `cp1251` or `cp1252`. A byte the chosen page does not
+define is an `InvalidDataException` at its offset in the row body. Every record struct with text also has
+`Decode(ReadOnlySpan<byte>, Encoding)` to read the values in a given encoding.
 
 ## Object model: parts, assemblies, bolts and welds
 
@@ -168,6 +174,11 @@ byte order mark; `ascii` when every byte is below 0x80; `utf-8` when the bytes a
 least half of the bytes from 0x80 are 0xC0 or above, else `cp1252`. One encoding is used for the whole file. A byte the
 chosen code page does not define is an `InvalidDataException` at its offset: bytes are never replaced to make the text
 decode. A forced encoding is used as given, without its own byte order mark.
+
+The text values of table rows follow the same order for each value, without the byte order mark steps, and
+`TdbReadOptions.TextEncoding` given to `TdbFile.Open` applies to them as well. The choice between `cp1251` and `cp1252`
+counts bytes from 0xC0, which hold Cyrillic letters in 1251 and Latin letters with diacritics in 1252: give the encoding
+for a model saved with a Western European page.
 
 ## Limits
 

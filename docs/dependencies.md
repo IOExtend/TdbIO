@@ -20,7 +20,7 @@ They use the following .NET runtime libraries:
 | Runtime library | Used for |
 | --- | --- |
 | `System.IO.Compression` (`DeflateStream`) | The deflate data inside the gzip wrapper of model files. The gzip header, trailer and CRC-32 are checked by the library's own code. |
-| `System.Text.CodePagesEncodingProvider` | Code pages 1251 and 1252 for templates and reports. The provider is used directly; the library does not register it globally, so the encodings of the calling application are not changed. |
+| `System.Text.CodePagesEncodingProvider` | Code pages 1251 and 1252 for templates, reports and the text values of table rows. The provider is used directly; the library does not register it globally, so the encodings of the calling application are not changed. |
 | `System.Text.Json` (`Utf8JsonWriter`) | The `--json` output of the command line tool and the JSON output of the object model (`TeklaModel.WriteJson`). Part of the runtime; no package. |
 | `System.Security.Cryptography` (`SHA256`) | The stable IFC GlobalId derived for a model object without a GUID (`TeklaIfcGuid.FromElementId`). Part of the runtime; no package. |
 

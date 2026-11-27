@@ -1,3 +1,4 @@
+using System.Text;
 using TdbIO.Internal;
 
 namespace TdbIO;
@@ -7,11 +8,14 @@ namespace TdbIO;
 public sealed partial class Db1Document : TdbDocument
 {
     private readonly byte[] _payload;
+    private readonly Encoding? _textEncoding;
 
-    private Db1Document(byte[] payload, string version, Guid modelGuid, IdMap? idMap, IReadOnlyList<string> warnings)
+    private Db1Document(byte[] payload, string version, Guid modelGuid, IdMap? idMap, IReadOnlyList<string> warnings,
+        Encoding? textEncoding)
         : base(TdbFileKind.Db1, warnings)
     {
         _payload = payload;
+        _textEncoding = textEncoding;
         Version = version;
         ModelGuid = modelGuid;
         IdMapField65 = idMap?.Field65;
@@ -46,12 +50,15 @@ public sealed partial class Db1Document : TdbDocument
     /// missing id, a cycle, a row reached from two chains or a last row without NUL.</exception>
     public IReadOnlyList<TextSection> ReadTextSections() => TextSectionReader.ReadAll(_payload);
 
-    internal static Db1Document Create(byte[] payload)
+    /// <param name="payload">The unpacked bytes of the file, header included.</param>
+    /// <param name="textEncoding">The encoding the typed decoders read the text values of table rows with
+    /// (<see cref="TableRow.TextEncoding"/>), or null to choose it from the bytes of each value.</param>
+    internal static Db1Document Create(byte[] payload, Encoding? textEncoding = null)
     {
         ArgumentNullException.ThrowIfNull(payload);
         var (_, version, modelGuid) = XsteelHeader.Read(payload, XsteelHeader.Db1Type);
         var warnings = new List<string>();
         var idMap = IdMapReader.Read(payload, warnings);
-        return new Db1Document(payload, version, modelGuid, idMap, warnings);
+        return new Db1Document(payload, version, modelGuid, idMap, warnings, textEncoding);
     }
 }

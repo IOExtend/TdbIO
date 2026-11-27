@@ -3,26 +3,19 @@ using System.Text;
 
 namespace TdbIO.Internal;
 
-/// <summary>Chooses the encoding of a template or report and decodes it: UTF-8 after a byte order mark, ASCII, UTF-8,
-/// then code page 1251 when most high bytes are letters of that page, else code page 1252. Bytes are never changed to
-/// fit a guess.</summary>
+/// <summary>Chooses the encoding of a text and decodes it. For a template or report: UTF-8 after a byte order mark, ASCII,
+/// UTF-8, then code page 1251 when most high bytes are letters of that page, else code page 1252. The text values of
+/// table rows follow the same order without the byte order mark steps (<see cref="DecodeUnmarked"/>). Bytes are never
+/// changed to fit a guess.</summary>
 internal static class TextDecoding
 {
     public static string Decode(ReadOnlySpan<byte> bytes, Encoding? forced, out string encodingName)
     {
         if (forced != null)
         {
-            encodingName = forced.WebName;
             // A byte order mark of the forced encoding is not text, as with the detected UTF-8 one.
             int start = forced.Preamble.Length > 0 && bytes.StartsWith(forced.Preamble) ? forced.Preamble.Length : 0;
-            try
-            {
-                return forced.GetString(bytes[start..]);
-            }
-            catch (DecoderFallbackException e)
-            {
-                throw FormatError.At($"the text is not valid {encodingName}", start + Math.Max(0, e.Index), e);
-            }
+            return DecodeForced(bytes[start..], forced, out encodingName, start);
         }
         if (bytes.StartsWith(Utf8Bom))
         {
@@ -33,6 +26,16 @@ internal static class TextDecoding
         }
         if (bytes.StartsWith(Utf16Le) || bytes.StartsWith(Utf16Be))
             throw new NotSupportedException("UTF-16 text is not supported.");
+        return DecodeUnmarked(bytes, null, out encodingName);
+    }
+
+    /// <summary>Decodes bytes that carry no byte order mark: as <paramref name="forced"/> when it is given, else ASCII,
+    /// UTF-8, then code page 1251 when at least half of the high bytes are 0xC0 or above, else code page 1252. This is
+    /// the order of the rule for templates and reports without its mark steps, and the rule for one text value of a
+    /// table row.</summary>
+    public static string DecodeUnmarked(ReadOnlySpan<byte> bytes, Encoding? forced, out string encodingName)
+    {
+        if (forced != null) return DecodeForced(bytes, forced, out encodingName, 0);
 
         int high = 0, upper = 0;
         foreach (byte b in bytes)
@@ -60,6 +63,19 @@ internal static class TextDecoding
         if (undefined >= 0)
             throw FormatError.At($"byte 0x{bytes[undefined]:X2} is not defined in {encodingName}", undefined);
         return encoding.GetString(bytes);
+    }
+
+    private static string DecodeForced(ReadOnlySpan<byte> bytes, Encoding forced, out string encodingName, long start)
+    {
+        encodingName = forced.WebName;
+        try
+        {
+            return forced.GetString(bytes);
+        }
+        catch (DecoderFallbackException e)
+        {
+            throw FormatError.At($"the text is not valid {encodingName}", start + Math.Max(0, e.Index), e);
+        }
     }
 
     private static ReadOnlySpan<byte> Utf8Bom => [0xEF, 0xBB, 0xBF];

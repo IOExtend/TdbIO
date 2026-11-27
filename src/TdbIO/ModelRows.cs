@@ -1,3 +1,4 @@
+using System.Text;
 using TdbIO.Internal;
 
 namespace TdbIO;
@@ -84,8 +85,14 @@ public readonly record struct AssemblyRow(
     /// <summary>The table key in model database sections: 2.</summary>
     public const int TableKey = 2;
 
-    /// <summary>Decodes a row body into an <see cref="AssemblyRow"/>.</summary>
-    public static AssemblyRow Decode(ReadOnlySpan<byte> body)
+    /// <summary>Decodes a row body into an <see cref="AssemblyRow"/>, choosing the encoding of its text values from their bytes.</summary>
+    public static AssemblyRow Decode(ReadOnlySpan<byte> body) => Decode(body, null);
+
+    /// <summary>Decodes a row body into an <see cref="AssemblyRow"/>, reading its text values in <paramref name="textEncoding"/>.</summary>
+    /// <param name="body">The row body.</param>
+    /// <param name="textEncoding">The encoding of the text values, or null to choose it from the bytes of each value:
+    /// ASCII, UTF-8, then code page 1251 or 1252.</param>
+    public static AssemblyRow Decode(ReadOnlySpan<byte> body, Encoding? textEncoding)
     {
         if (body.Length < ExpectedRowSize)
             throw new ArgumentException($"Row body length {body.Length} is smaller than expected size {ExpectedRowSize}.", nameof(body));
@@ -95,13 +102,13 @@ public readonly record struct AssemblyRow(
             Bytes.I32(body, 8),
             Bytes.I32(body, 12),
             Bytes.I32(body, 16),
-            Bytes.AsciiString(body, 20, 64),
+            Bytes.Text(body, 20, 64, textEncoding),
             Bytes.I32(body, 84),
             Bytes.I32(body, 88));
     }
 
     /// <summary>Decodes the body of <paramref name="row"/> into an <see cref="AssemblyRow"/>.</summary>
-    public static AssemblyRow Decode(TableRow row) => Decode(row.Body.Span);
+    public static AssemblyRow Decode(TableRow row) => Decode(row.Body.Span, row.TextEncoding);
 }
 
 /// <summary>Decoded row of table 3 (<c>coordsys</c>, size 40): coordinate system origin and length.</summary>
@@ -240,8 +247,14 @@ public readonly record struct RelationRow(int Id, int Type, int Id1, int Id2, st
     /// <summary>The table key in model database sections: 16.</summary>
     public const int TableKey = 16;
 
-    /// <summary>Decodes a row body into a <see cref="RelationRow"/>.</summary>
-    public static RelationRow Decode(ReadOnlySpan<byte> body)
+    /// <summary>Decodes a row body into a <see cref="RelationRow"/>, choosing the encoding of its text values from their bytes.</summary>
+    public static RelationRow Decode(ReadOnlySpan<byte> body) => Decode(body, null);
+
+    /// <summary>Decodes a row body into a <see cref="RelationRow"/>, reading its text values in <paramref name="textEncoding"/>.</summary>
+    /// <param name="body">The row body.</param>
+    /// <param name="textEncoding">The encoding of the text values, or null to choose it from the bytes of each value:
+    /// ASCII, UTF-8, then code page 1251 or 1252.</param>
+    public static RelationRow Decode(ReadOnlySpan<byte> body, Encoding? textEncoding)
     {
         if (body.Length < ExpectedRowSize)
             throw new ArgumentException($"Row body length {body.Length} is smaller than expected size {ExpectedRowSize}.", nameof(body));
@@ -250,12 +263,12 @@ public readonly record struct RelationRow(int Id, int Type, int Id1, int Id2, st
             Bytes.I32(body, 4),
             Bytes.I32(body, 8),
             Bytes.I32(body, 12),
-            Bytes.AsciiString(body, 16, 40),
+            Bytes.Text(body, 16, 40, textEncoding),
             Bytes.I32(body, 56));
     }
 
     /// <summary>Decodes the body of <paramref name="row"/> into a <see cref="RelationRow"/>.</summary>
-    public static RelationRow Decode(TableRow row) => Decode(row.Body.Span);
+    public static RelationRow Decode(TableRow row) => Decode(row.Body.Span, row.TextEncoding);
 }
 
 /// <summary>Decoded row of table 20 (<c>welding</c>, size 24): weld connection and seam references.</summary>
@@ -402,8 +415,14 @@ public readonly record struct PartAttrRow(
     /// <summary>The table key in model database sections: 44.</summary>
     public const int TableKey = 44;
 
-    /// <summary>Decodes a row body into a <see cref="PartAttrRow"/>.</summary>
-    public static PartAttrRow Decode(ReadOnlySpan<byte> body)
+    /// <summary>Decodes a row body into a <see cref="PartAttrRow"/>, choosing the encoding of its text values from their bytes.</summary>
+    public static PartAttrRow Decode(ReadOnlySpan<byte> body) => Decode(body, null);
+
+    /// <summary>Decodes a row body into a <see cref="PartAttrRow"/>, reading its text values in <paramref name="textEncoding"/>.</summary>
+    /// <param name="body">The row body.</param>
+    /// <param name="textEncoding">The encoding of the text values, or null to choose it from the bytes of each value:
+    /// ASCII, UTF-8, then code page 1251 or 1252.</param>
+    public static PartAttrRow Decode(ReadOnlySpan<byte> body, Encoding? textEncoding)
     {
         if (body.Length < ExpectedRowSize)
             throw new ArgumentException($"Row body length {body.Length} is smaller than expected size {ExpectedRowSize}.", nameof(body));
@@ -416,20 +435,20 @@ public readonly record struct PartAttrRow(
             Bytes.I32(body, 20),
             Bytes.I32(body, 24),
             Bytes.I32(body, 28),
-            Bytes.AsciiString(body, 32, 22),
-            Bytes.AsciiString(body, 54, 62),
-            Bytes.AsciiString(body, 116, 62),
+            Bytes.Text(body, 32, 22, textEncoding),
+            Bytes.Text(body, 54, 62, textEncoding),
+            Bytes.Text(body, 116, 62, textEncoding),
             Bytes.I32(body, 180),
-            Bytes.AsciiString(body, 184, 22),
-            Bytes.AsciiString(body, 206, 62),
-            Bytes.AsciiString(body, 268, 32),
-            Bytes.AsciiString(body, 300, 62),
+            Bytes.Text(body, 184, 22, textEncoding),
+            Bytes.Text(body, 206, 62, textEncoding),
+            Bytes.Text(body, 268, 32, textEncoding),
+            Bytes.Text(body, 300, 62, textEncoding),
             Bytes.I32(body, 364),
             Bytes.I32(body, 368));
     }
 
     /// <summary>Decodes the body of <paramref name="row"/> into a <see cref="PartAttrRow"/>.</summary>
-    public static PartAttrRow Decode(TableRow row) => Decode(row.Body.Span);
+    public static PartAttrRow Decode(TableRow row) => Decode(row.Body.Span, row.TextEncoding);
 }
 
 /// <summary>Decoded row of table 48 (<c>numattr_attr</c>, size 44): numeric attribute definition and value.</summary>
@@ -446,8 +465,14 @@ public readonly record struct NumAttrAttrRow(int Id, int Type, double Value, str
     /// <summary>The table key in model database sections: 48.</summary>
     public const int TableKey = 48;
 
-    /// <summary>Decodes a row body into a <see cref="NumAttrAttrRow"/>.</summary>
-    public static NumAttrAttrRow Decode(ReadOnlySpan<byte> body)
+    /// <summary>Decodes a row body into a <see cref="NumAttrAttrRow"/>, choosing the encoding of its text values from their bytes.</summary>
+    public static NumAttrAttrRow Decode(ReadOnlySpan<byte> body) => Decode(body, null);
+
+    /// <summary>Decodes a row body into a <see cref="NumAttrAttrRow"/>, reading its text values in <paramref name="textEncoding"/>.</summary>
+    /// <param name="body">The row body.</param>
+    /// <param name="textEncoding">The encoding of the text values, or null to choose it from the bytes of each value:
+    /// ASCII, UTF-8, then code page 1251 or 1252.</param>
+    public static NumAttrAttrRow Decode(ReadOnlySpan<byte> body, Encoding? textEncoding)
     {
         if (body.Length < ExpectedRowSize)
             throw new ArgumentException($"Row body length {body.Length} is smaller than expected size {ExpectedRowSize}.", nameof(body));
@@ -455,12 +480,12 @@ public readonly record struct NumAttrAttrRow(int Id, int Type, double Value, str
             Bytes.I32(body, 0),
             Bytes.I32(body, 4),
             Bytes.F64(body, 8),
-            Bytes.AsciiString(body, 16, 21),
+            Bytes.Text(body, 16, 21, textEncoding),
             Bytes.I32(body, 40));
     }
 
     /// <summary>Decodes the body of <paramref name="row"/> into a <see cref="NumAttrAttrRow"/>.</summary>
-    public static NumAttrAttrRow Decode(TableRow row) => Decode(row.Body.Span);
+    public static NumAttrAttrRow Decode(TableRow row) => Decode(row.Body.Span, row.TextEncoding);
 }
 
 /// <summary>Decoded row of table 49 (<c>strattr_attr</c>, size 120): string attribute definition and value.</summary>
@@ -478,22 +503,28 @@ public readonly record struct StrAttrAttrRow(int Id, int Type, string Name, stri
     /// <summary>The table key in model database sections: 49.</summary>
     public const int TableKey = 49;
 
-    /// <summary>Decodes a row body into a <see cref="StrAttrAttrRow"/>.</summary>
-    public static StrAttrAttrRow Decode(ReadOnlySpan<byte> body)
+    /// <summary>Decodes a row body into a <see cref="StrAttrAttrRow"/>, choosing the encoding of its text values from their bytes.</summary>
+    public static StrAttrAttrRow Decode(ReadOnlySpan<byte> body) => Decode(body, null);
+
+    /// <summary>Decodes a row body into a <see cref="StrAttrAttrRow"/>, reading its text values in <paramref name="textEncoding"/>.</summary>
+    /// <param name="body">The row body.</param>
+    /// <param name="textEncoding">The encoding of the text values, or null to choose it from the bytes of each value:
+    /// ASCII, UTF-8, then code page 1251 or 1252.</param>
+    public static StrAttrAttrRow Decode(ReadOnlySpan<byte> body, Encoding? textEncoding)
     {
         if (body.Length < ExpectedRowSize)
             throw new ArgumentException($"Row body length {body.Length} is smaller than expected size {ExpectedRowSize}.", nameof(body));
         return new(
             Bytes.I32(body, 0),
             Bytes.I32(body, 4),
-            Bytes.AsciiString(body, 8, 21),
-            Bytes.AsciiString(body, 29, 81),
+            Bytes.Text(body, 8, 21, textEncoding),
+            Bytes.Text(body, 29, 81, textEncoding),
             Bytes.I32(body, 112),
             Bytes.I32(body, 116));
     }
 
     /// <summary>Decodes the body of <paramref name="row"/> into a <see cref="StrAttrAttrRow"/>.</summary>
-    public static StrAttrAttrRow Decode(TableRow row) => Decode(row.Body.Span);
+    public static StrAttrAttrRow Decode(TableRow row) => Decode(row.Body.Span, row.TextEncoding);
 }
 
 /// <summary>Decoded row of table 50 (<c>string</c>, size 45): string pool chunk.</summary>
@@ -511,8 +542,14 @@ public readonly record struct StringPoolRow(int Id, int NextId, int HashId, int 
     /// <summary>The table key in model database sections: 50.</summary>
     public const int TableKey = 50;
 
-    /// <summary>Decodes a row body into a <see cref="StringPoolRow"/>.</summary>
-    public static StringPoolRow Decode(ReadOnlySpan<byte> body)
+    /// <summary>Decodes a row body into a <see cref="StringPoolRow"/>, choosing the encoding of its text values from their bytes.</summary>
+    public static StringPoolRow Decode(ReadOnlySpan<byte> body) => Decode(body, null);
+
+    /// <summary>Decodes a row body into a <see cref="StringPoolRow"/>, reading its text values in <paramref name="textEncoding"/>.</summary>
+    /// <param name="body">The row body.</param>
+    /// <param name="textEncoding">The encoding of the text values, or null to choose it from the bytes of each value:
+    /// ASCII, UTF-8, then code page 1251 or 1252.</param>
+    public static StringPoolRow Decode(ReadOnlySpan<byte> body, Encoding? textEncoding)
     {
         if (body.Length < ExpectedRowSize)
             throw new ArgumentException($"Row body length {body.Length} is smaller than expected size {ExpectedRowSize}.", nameof(body));
@@ -524,7 +561,7 @@ public readonly record struct StringPoolRow(int Id, int NextId, int HashId, int 
         string text;
         try
         {
-            text = Bytes.AsciiString(body, 16, 29);
+            text = Bytes.Text(body, 16, 29, textEncoding);
         }
         catch (InvalidDataException)
         {
@@ -536,7 +573,7 @@ public readonly record struct StringPoolRow(int Id, int NextId, int HashId, int 
     }
 
     /// <summary>Decodes the body of <paramref name="row"/> into a <see cref="StringPoolRow"/>.</summary>
-    public static StringPoolRow Decode(TableRow row) => Decode(row.Body.Span);
+    public static StringPoolRow Decode(TableRow row) => Decode(row.Body.Span, row.TextEncoding);
 }
 
 /// <summary>Decoded row of table 94 (<c>part_numbering</c>, size 68): part numbering series and mark prefix.</summary>
@@ -554,8 +591,14 @@ public readonly record struct PartNumberingRow(int Id, int SeriesId, int StartNu
     /// <summary>The table key in model database sections: 94.</summary>
     public const int TableKey = 94;
 
-    /// <summary>Decodes a row body into a <see cref="PartNumberingRow"/>.</summary>
-    public static PartNumberingRow Decode(ReadOnlySpan<byte> body)
+    /// <summary>Decodes a row body into a <see cref="PartNumberingRow"/>, choosing the encoding of its text values from their bytes.</summary>
+    public static PartNumberingRow Decode(ReadOnlySpan<byte> body) => Decode(body, null);
+
+    /// <summary>Decodes a row body into a <see cref="PartNumberingRow"/>, reading its text values in <paramref name="textEncoding"/>.</summary>
+    /// <param name="body">The row body.</param>
+    /// <param name="textEncoding">The encoding of the text values, or null to choose it from the bytes of each value:
+    /// ASCII, UTF-8, then code page 1251 or 1252.</param>
+    public static PartNumberingRow Decode(ReadOnlySpan<byte> body, Encoding? textEncoding)
     {
         if (body.Length < ExpectedRowSize)
             throw new ArgumentException($"Row body length {body.Length} is smaller than expected size {ExpectedRowSize}.", nameof(body));
@@ -565,11 +608,11 @@ public readonly record struct PartNumberingRow(int Id, int SeriesId, int StartNu
             Bytes.I32(body, 8),
             Bytes.I32(body, 12),
             Bytes.I32(body, 16),
-            Bytes.AsciiString(body, 20, 48));
+            Bytes.Text(body, 20, 48, textEncoding));
     }
 
     /// <summary>Decodes the body of <paramref name="row"/> into a <see cref="PartNumberingRow"/>.</summary>
-    public static PartNumberingRow Decode(TableRow row) => Decode(row.Body.Span);
+    public static PartNumberingRow Decode(TableRow row) => Decode(row.Body.Span, row.TextEncoding);
 }
 
 /// <summary>Decoded row of table 95 (<c>assembly_numbering</c>, size 76): assembly numbering series and mark prefix.</summary>
@@ -597,8 +640,14 @@ public readonly record struct AssemblyNumberingRow(
     /// <summary>The table key in model database sections: 95.</summary>
     public const int TableKey = 95;
 
-    /// <summary>Decodes a row body into an <see cref="AssemblyNumberingRow"/>.</summary>
-    public static AssemblyNumberingRow Decode(ReadOnlySpan<byte> body)
+    /// <summary>Decodes a row body into an <see cref="AssemblyNumberingRow"/>, choosing the encoding of its text values from their bytes.</summary>
+    public static AssemblyNumberingRow Decode(ReadOnlySpan<byte> body) => Decode(body, null);
+
+    /// <summary>Decodes a row body into an <see cref="AssemblyNumberingRow"/>, reading its text values in <paramref name="textEncoding"/>.</summary>
+    /// <param name="body">The row body.</param>
+    /// <param name="textEncoding">The encoding of the text values, or null to choose it from the bytes of each value:
+    /// ASCII, UTF-8, then code page 1251 or 1252.</param>
+    public static AssemblyNumberingRow Decode(ReadOnlySpan<byte> body, Encoding? textEncoding)
     {
         if (body.Length < ExpectedRowSize)
             throw new ArgumentException($"Row body length {body.Length} is smaller than expected size {ExpectedRowSize}.", nameof(body));
@@ -610,11 +659,11 @@ public readonly record struct AssemblyNumberingRow(
             Bytes.I32(body, 16),
             Bytes.I32(body, 20),
             Bytes.I32(body, 24),
-            Bytes.AsciiString(body, 28, 48));
+            Bytes.Text(body, 28, 48, textEncoding));
     }
 
     /// <summary>Decodes the body of <paramref name="row"/> into an <see cref="AssemblyNumberingRow"/>.</summary>
-    public static AssemblyNumberingRow Decode(TableRow row) => Decode(row.Body.Span);
+    public static AssemblyNumberingRow Decode(TableRow row) => Decode(row.Body.Span, row.TextEncoding);
 }
 
 /// <summary>Decoded row of table 105 (<c>object_numbering</c>, size 12): object numbering association.</summary>
