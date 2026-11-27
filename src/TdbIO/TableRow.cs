@@ -29,10 +29,14 @@ public readonly record struct TableRow(long Offset, byte Marker, ReadOnlyMemory<
 
     /// <summary>The encoding the typed decoders (<see cref="AsPart"/>, <see cref="AsPartAttr"/> and the others) read the
     /// text values of this row with: the <see cref="TdbReadOptions.TextEncoding"/> the file was opened with, or null to
-    /// choose it from the bytes of each value (ASCII, UTF-8, then code page 1251 or 1252). The text of a model is
-    /// single-byte in the code page of the system that saved it, so a value with bytes from 0x80 is not an error; a byte
-    /// the chosen encoding does not define is.</summary>
-    public Encoding? TextEncoding { get; internal init; }
+    /// choose it from the bytes. Each value is then ASCII or UTF-8 when its bytes are, else code page 1251 or 1252, chosen
+    /// once for the whole file from all such values of the typed tables. The text of a model is single-byte in the code
+    /// page of the system that saved it, so a value with bytes from 0x80 is not an error; a byte the chosen encoding does
+    /// not define is.</summary>
+    public Encoding? TextEncoding => Text?.Encoding;
+
+    /// <summary>The text rule of the file the row was read from; null for a row built by a caller.</summary>
+    internal Internal.RowText? Text { get; init; }
 
     /// <summary>Decodes the row body as an <see cref="ObjectRow"/> (table 1, size 72).</summary>
     public ObjectRow AsObject() => ObjectRow.Decode(this);

@@ -1,13 +1,12 @@
 using System.Buffers.Binary;
 using System.Collections;
-using System.Text;
 
 namespace TdbIO.Internal;
 
 /// <summary>The rows of a section as a fixed-stride view over the data. A section can hold millions of rows, so nothing
 /// is stored per row; the walk has already checked every row.</summary>
 internal sealed class RowList(ReadOnlyMemory<byte> data, long rowsOffset, int count, int rowSize, SectionMode mode,
-    Encoding? textEncoding = null)
+    RowText? text = null)
     : IReadOnlyList<TableRow>
 {
     public int Count => count;
@@ -33,7 +32,7 @@ internal sealed class RowList(ReadOnlyMemory<byte> data, long rowsOffset, int co
             }
             return new TableRow(offset, data.Span[(int)offset], data.Slice((int)offset + 1, rowSize), a, b)
             {
-                TextEncoding = textEncoding,
+                Text = text,
             };
         }
     }

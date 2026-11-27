@@ -120,6 +120,75 @@ public class RowTextTests
         Assert.Equal("Столб", plain.AsAssembly().Name);
     }
 
+    // An assembly section whose rows have these names, in a gzip .db1 file.
+    private static MemoryStream Db1WithAssemblyNames(params byte[][] names)
+    {
+        var rows = new (byte, byte[], int, int)[names.Length];
+        for (int i = 0; i < names.Length; i++)
+        {
+            var body = new byte[AssemblyRow.ExpectedRowSize];
+            BinaryPrimitives.WriteInt32LittleEndian(body.AsSpan(0..), 10 + i);
+            names[i].CopyTo(body, 20);
+            rows[i] = (4, body, 1, 1);
+        }
+        byte[] payload = Synthetic.Db1TablesPayload(
+            Synthetic.Db1Section(null, 4, [1]),
+            Synthetic.Db1Section(AssemblyRow.TableKey, AssemblyRow.ExpectedRowSize, [1], rows));
+        return new MemoryStream(Synthetic.Gzip(payload));
+    }
+
+    private static string[] AssemblyNames(Stream file) =>
+        Assert.Single(Assert.IsType<Db1Document>(TdbFile.Open(file)).ReadTables(), s => s.Key is not null)
+            .AsAssemblies().Select(a => a.Name).ToArray();
+
+    [Fact]
+    public void AShortValueTakesTheCodePageOfItsFile()
+    {
+        // "№5" alone has one byte from 0x80 and none from 0xC0, so on its own it reads as code page 1252 ("¹5"). The
+        // other values of the file are Cyrillic letters, so the file is code page 1251 and so is the short value.
+        Assert.Equal("¹5", Decode(Cp1251.GetBytes("№5"), 0, 2));
+
+        using var file = Db1WithAssemblyNames(Cp1251.GetBytes("Колонна"), Cp1251.GetBytes("№5"), Cp1251.GetBytes("Ёж"));
+
+        Assert.Equal(["Колонна", "№5", "Ёж"], AssemblyNames(file));
+    }
+
+    [Fact]
+    public void AsciiAndUtf8ValuesStayAsciiAndUtf8InAFileOfACodePage()
+    {
+        // The code page of the file is only for the values that are neither ASCII nor UTF-8.
+        using var file = Db1WithAssemblyNames(Cp1251.GetBytes("Колонна"), Encoding.UTF8.GetBytes("Ёж"), "plain"u8.ToArray());
+
+        Assert.Equal(["Колонна", "Ёж", "plain"], AssemblyNames(file));
+    }
+
+    [Fact]
+    public void AFileOfLatinTextWithoutLettersFromC0IsCodePage1252()
+    {
+        using var file = Db1WithAssemblyNames(Cp1252.GetBytes("10°½"), Cp1252.GetBytes("±5"));
+
+        Assert.Equal(["10°½", "±5"], AssemblyNames(file));
+    }
+
+    [Fact]
+    public void ABrokenStringPoolChainNamesTheByteOfTheChainNotAnOffsetOfTheFile()
+    {
+        // 0xC0 chooses code page 1251, which does not define 0x98, the second byte of the chain.
+        TableRow pool = Row(StringPoolRow.ExpectedRowSize, span =>
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(span[0..], 1);
+            BinaryPrimitives.WriteInt32LittleEndian(span[4..], -1);
+            span[16] = 0xC0;
+            span[17] = 0x98;
+        });
+        var section = new TableSection(0, 0, 100, StringPoolRow.TableKey, StringPoolRow.ExpectedRowSize, [0, 0, 0], 20,
+            [pool], new RowText(null));
+
+        var e = Assert.Throws<InvalidDataException>(() =>
+            ModelBuilder.BuildFromSections(Db1Document.Create(Synthetic.Db1Payload([])), [section]));
+        Assert.Equal("string pool chain 1: byte 0x98 is not defined in cp1251 at byte 1 of the joined chunks", e.Message);
+    }
+
     [Fact]
     public void TheModelReadsTheStringsWithTheEncodingOfTheFile()
     {
@@ -146,7 +215,7 @@ public class RowTextTests
 
         // The sections as the reader builds them for a file opened with the encoding.
         static TableSection Section(int key, int size, Encoding? textEncoding, params TableRow[] rows) =>
-            new(0, 0, 100, key, size, [0, 0, 0], 20, rows, textEncoding);
+            new(0, 0, 100, key, size, [0, 0, 0], 20, rows, new RowText(textEncoding));
         string Attribute(Encoding? textEncoding) => ModelBuilder.BuildFromSections(
             Db1Document.Create(Synthetic.Db1Payload([]), textEncoding),
             [

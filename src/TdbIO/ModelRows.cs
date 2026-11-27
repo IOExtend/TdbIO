@@ -92,7 +92,10 @@ public readonly record struct AssemblyRow(
     /// <param name="body">The row body.</param>
     /// <param name="textEncoding">The encoding of the text values, or null to choose it from the bytes of each value:
     /// ASCII, UTF-8, then code page 1251 or 1252.</param>
-    public static AssemblyRow Decode(ReadOnlySpan<byte> body, Encoding? textEncoding)
+    public static AssemblyRow Decode(ReadOnlySpan<byte> body, Encoding? textEncoding) => Decode(body, textEncoding, null);
+
+    // codePage: the code page chosen for the whole file for the values that are neither ASCII nor UTF-8 (RowText).
+    internal static AssemblyRow Decode(ReadOnlySpan<byte> body, Encoding? textEncoding, int? codePage)
     {
         if (body.Length < ExpectedRowSize)
             throw new ArgumentException($"Row body length {body.Length} is smaller than expected size {ExpectedRowSize}.", nameof(body));
@@ -102,13 +105,13 @@ public readonly record struct AssemblyRow(
             Bytes.I32(body, 8),
             Bytes.I32(body, 12),
             Bytes.I32(body, 16),
-            Bytes.Text(body, 20, 64, textEncoding),
+            Bytes.Text(body, 20, 64, textEncoding, codePage),
             Bytes.I32(body, 84),
             Bytes.I32(body, 88));
     }
 
     /// <summary>Decodes the body of <paramref name="row"/> into an <see cref="AssemblyRow"/>.</summary>
-    public static AssemblyRow Decode(TableRow row) => Decode(row.Body.Span, row.TextEncoding);
+    public static AssemblyRow Decode(TableRow row) => Decode(row.Body.Span, row.Text?.Encoding, row.Text?.CodePage);
 }
 
 /// <summary>Decoded row of table 3 (<c>coordsys</c>, size 40): coordinate system origin and length.</summary>
@@ -254,7 +257,10 @@ public readonly record struct RelationRow(int Id, int Type, int Id1, int Id2, st
     /// <param name="body">The row body.</param>
     /// <param name="textEncoding">The encoding of the text values, or null to choose it from the bytes of each value:
     /// ASCII, UTF-8, then code page 1251 or 1252.</param>
-    public static RelationRow Decode(ReadOnlySpan<byte> body, Encoding? textEncoding)
+    public static RelationRow Decode(ReadOnlySpan<byte> body, Encoding? textEncoding) => Decode(body, textEncoding, null);
+
+    // codePage: the code page chosen for the whole file for the values that are neither ASCII nor UTF-8 (RowText).
+    internal static RelationRow Decode(ReadOnlySpan<byte> body, Encoding? textEncoding, int? codePage)
     {
         if (body.Length < ExpectedRowSize)
             throw new ArgumentException($"Row body length {body.Length} is smaller than expected size {ExpectedRowSize}.", nameof(body));
@@ -263,12 +269,12 @@ public readonly record struct RelationRow(int Id, int Type, int Id1, int Id2, st
             Bytes.I32(body, 4),
             Bytes.I32(body, 8),
             Bytes.I32(body, 12),
-            Bytes.Text(body, 16, 40, textEncoding),
+            Bytes.Text(body, 16, 40, textEncoding, codePage),
             Bytes.I32(body, 56));
     }
 
     /// <summary>Decodes the body of <paramref name="row"/> into a <see cref="RelationRow"/>.</summary>
-    public static RelationRow Decode(TableRow row) => Decode(row.Body.Span, row.TextEncoding);
+    public static RelationRow Decode(TableRow row) => Decode(row.Body.Span, row.Text?.Encoding, row.Text?.CodePage);
 }
 
 /// <summary>Decoded row of table 20 (<c>welding</c>, size 24): weld connection and seam references.</summary>
@@ -422,7 +428,10 @@ public readonly record struct PartAttrRow(
     /// <param name="body">The row body.</param>
     /// <param name="textEncoding">The encoding of the text values, or null to choose it from the bytes of each value:
     /// ASCII, UTF-8, then code page 1251 or 1252.</param>
-    public static PartAttrRow Decode(ReadOnlySpan<byte> body, Encoding? textEncoding)
+    public static PartAttrRow Decode(ReadOnlySpan<byte> body, Encoding? textEncoding) => Decode(body, textEncoding, null);
+
+    // codePage: the code page chosen for the whole file for the values that are neither ASCII nor UTF-8 (RowText).
+    internal static PartAttrRow Decode(ReadOnlySpan<byte> body, Encoding? textEncoding, int? codePage)
     {
         if (body.Length < ExpectedRowSize)
             throw new ArgumentException($"Row body length {body.Length} is smaller than expected size {ExpectedRowSize}.", nameof(body));
@@ -435,20 +444,20 @@ public readonly record struct PartAttrRow(
             Bytes.I32(body, 20),
             Bytes.I32(body, 24),
             Bytes.I32(body, 28),
-            Bytes.Text(body, 32, 22, textEncoding),
-            Bytes.Text(body, 54, 62, textEncoding),
-            Bytes.Text(body, 116, 62, textEncoding),
+            Bytes.Text(body, 32, 22, textEncoding, codePage),
+            Bytes.Text(body, 54, 62, textEncoding, codePage),
+            Bytes.Text(body, 116, 62, textEncoding, codePage),
             Bytes.I32(body, 180),
-            Bytes.Text(body, 184, 22, textEncoding),
-            Bytes.Text(body, 206, 62, textEncoding),
-            Bytes.Text(body, 268, 32, textEncoding),
-            Bytes.Text(body, 300, 62, textEncoding),
+            Bytes.Text(body, 184, 22, textEncoding, codePage),
+            Bytes.Text(body, 206, 62, textEncoding, codePage),
+            Bytes.Text(body, 268, 32, textEncoding, codePage),
+            Bytes.Text(body, 300, 62, textEncoding, codePage),
             Bytes.I32(body, 364),
             Bytes.I32(body, 368));
     }
 
     /// <summary>Decodes the body of <paramref name="row"/> into a <see cref="PartAttrRow"/>.</summary>
-    public static PartAttrRow Decode(TableRow row) => Decode(row.Body.Span, row.TextEncoding);
+    public static PartAttrRow Decode(TableRow row) => Decode(row.Body.Span, row.Text?.Encoding, row.Text?.CodePage);
 }
 
 /// <summary>Decoded row of table 48 (<c>numattr_attr</c>, size 44): numeric attribute definition and value.</summary>
@@ -472,7 +481,10 @@ public readonly record struct NumAttrAttrRow(int Id, int Type, double Value, str
     /// <param name="body">The row body.</param>
     /// <param name="textEncoding">The encoding of the text values, or null to choose it from the bytes of each value:
     /// ASCII, UTF-8, then code page 1251 or 1252.</param>
-    public static NumAttrAttrRow Decode(ReadOnlySpan<byte> body, Encoding? textEncoding)
+    public static NumAttrAttrRow Decode(ReadOnlySpan<byte> body, Encoding? textEncoding) => Decode(body, textEncoding, null);
+
+    // codePage: the code page chosen for the whole file for the values that are neither ASCII nor UTF-8 (RowText).
+    internal static NumAttrAttrRow Decode(ReadOnlySpan<byte> body, Encoding? textEncoding, int? codePage)
     {
         if (body.Length < ExpectedRowSize)
             throw new ArgumentException($"Row body length {body.Length} is smaller than expected size {ExpectedRowSize}.", nameof(body));
@@ -480,12 +492,12 @@ public readonly record struct NumAttrAttrRow(int Id, int Type, double Value, str
             Bytes.I32(body, 0),
             Bytes.I32(body, 4),
             Bytes.F64(body, 8),
-            Bytes.Text(body, 16, 21, textEncoding),
+            Bytes.Text(body, 16, 21, textEncoding, codePage),
             Bytes.I32(body, 40));
     }
 
     /// <summary>Decodes the body of <paramref name="row"/> into a <see cref="NumAttrAttrRow"/>.</summary>
-    public static NumAttrAttrRow Decode(TableRow row) => Decode(row.Body.Span, row.TextEncoding);
+    public static NumAttrAttrRow Decode(TableRow row) => Decode(row.Body.Span, row.Text?.Encoding, row.Text?.CodePage);
 }
 
 /// <summary>Decoded row of table 49 (<c>strattr_attr</c>, size 120): string attribute definition and value.</summary>
@@ -510,21 +522,24 @@ public readonly record struct StrAttrAttrRow(int Id, int Type, string Name, stri
     /// <param name="body">The row body.</param>
     /// <param name="textEncoding">The encoding of the text values, or null to choose it from the bytes of each value:
     /// ASCII, UTF-8, then code page 1251 or 1252.</param>
-    public static StrAttrAttrRow Decode(ReadOnlySpan<byte> body, Encoding? textEncoding)
+    public static StrAttrAttrRow Decode(ReadOnlySpan<byte> body, Encoding? textEncoding) => Decode(body, textEncoding, null);
+
+    // codePage: the code page chosen for the whole file for the values that are neither ASCII nor UTF-8 (RowText).
+    internal static StrAttrAttrRow Decode(ReadOnlySpan<byte> body, Encoding? textEncoding, int? codePage)
     {
         if (body.Length < ExpectedRowSize)
             throw new ArgumentException($"Row body length {body.Length} is smaller than expected size {ExpectedRowSize}.", nameof(body));
         return new(
             Bytes.I32(body, 0),
             Bytes.I32(body, 4),
-            Bytes.Text(body, 8, 21, textEncoding),
-            Bytes.Text(body, 29, 81, textEncoding),
+            Bytes.Text(body, 8, 21, textEncoding, codePage),
+            Bytes.Text(body, 29, 81, textEncoding, codePage),
             Bytes.I32(body, 112),
             Bytes.I32(body, 116));
     }
 
     /// <summary>Decodes the body of <paramref name="row"/> into a <see cref="StrAttrAttrRow"/>.</summary>
-    public static StrAttrAttrRow Decode(TableRow row) => Decode(row.Body.Span, row.TextEncoding);
+    public static StrAttrAttrRow Decode(TableRow row) => Decode(row.Body.Span, row.Text?.Encoding, row.Text?.CodePage);
 }
 
 /// <summary>Decoded row of table 50 (<c>string</c>, size 45): string pool chunk.</summary>
@@ -532,7 +547,10 @@ public readonly record struct StrAttrAttrRow(int Id, int Type, string Name, stri
 /// <param name="NextId">Identifier of the next chunk in a chained string, or negative if terminating.</param>
 /// <param name="HashId">Hash code of the string.</param>
 /// <param name="RefCount">Reference count.</param>
-/// <param name="Text">The text content of this chunk.</param>
+/// <param name="Text">The text of this chunk decoded on its own, or empty when its bytes cannot be decoded on their own.
+/// A value longer than one chunk is split over a chain, and a cut can fall inside a UTF-8 character, so the text of a
+/// chained value is the decoded join of the <see cref="RawBytes"/> of its chunks, as <see cref="Db1Document.ReadModel"/>
+/// reads it, not the join of these texts.</param>
 /// <param name="RawBytes">The raw bytes of this chunk (up to 29 bytes).</param>
 public readonly record struct StringPoolRow(int Id, int NextId, int HashId, int RefCount, string Text, ReadOnlyMemory<byte> RawBytes = default)
 {
@@ -549,7 +567,10 @@ public readonly record struct StringPoolRow(int Id, int NextId, int HashId, int 
     /// <param name="body">The row body.</param>
     /// <param name="textEncoding">The encoding of the text values, or null to choose it from the bytes of each value:
     /// ASCII, UTF-8, then code page 1251 or 1252.</param>
-    public static StringPoolRow Decode(ReadOnlySpan<byte> body, Encoding? textEncoding)
+    public static StringPoolRow Decode(ReadOnlySpan<byte> body, Encoding? textEncoding) => Decode(body, textEncoding, null);
+
+    // codePage: the code page chosen for the whole file for the values that are neither ASCII nor UTF-8 (RowText).
+    internal static StringPoolRow Decode(ReadOnlySpan<byte> body, Encoding? textEncoding, int? codePage)
     {
         if (body.Length < ExpectedRowSize)
             throw new ArgumentException($"Row body length {body.Length} is smaller than expected size {ExpectedRowSize}.", nameof(body));
@@ -561,19 +582,19 @@ public readonly record struct StringPoolRow(int Id, int NextId, int HashId, int 
         string text;
         try
         {
-            text = Bytes.Text(body, 16, 29, textEncoding);
+            text = Bytes.Text(body, 16, 29, textEncoding, codePage);
         }
         catch (InvalidDataException)
         {
-            // A chunk in a chained string may split multi-byte UTF-8 sequences.
-            // ModelBuilder reconstructs the full string across all chunks.
+            // Not an error of the file: a chunk is a piece of a value, and only the joined chain is a value. ModelBuilder
+            // decodes the joined RawBytes and reports a chain that does not decode.
             text = string.Empty;
         }
         return new(id, nextId, hashId, refCount, text, rawChunk);
     }
 
     /// <summary>Decodes the body of <paramref name="row"/> into a <see cref="StringPoolRow"/>.</summary>
-    public static StringPoolRow Decode(TableRow row) => Decode(row.Body.Span, row.TextEncoding);
+    public static StringPoolRow Decode(TableRow row) => Decode(row.Body.Span, row.Text?.Encoding, row.Text?.CodePage);
 }
 
 /// <summary>Decoded row of table 94 (<c>part_numbering</c>, size 68): part numbering series and mark prefix.</summary>
@@ -598,7 +619,10 @@ public readonly record struct PartNumberingRow(int Id, int SeriesId, int StartNu
     /// <param name="body">The row body.</param>
     /// <param name="textEncoding">The encoding of the text values, or null to choose it from the bytes of each value:
     /// ASCII, UTF-8, then code page 1251 or 1252.</param>
-    public static PartNumberingRow Decode(ReadOnlySpan<byte> body, Encoding? textEncoding)
+    public static PartNumberingRow Decode(ReadOnlySpan<byte> body, Encoding? textEncoding) => Decode(body, textEncoding, null);
+
+    // codePage: the code page chosen for the whole file for the values that are neither ASCII nor UTF-8 (RowText).
+    internal static PartNumberingRow Decode(ReadOnlySpan<byte> body, Encoding? textEncoding, int? codePage)
     {
         if (body.Length < ExpectedRowSize)
             throw new ArgumentException($"Row body length {body.Length} is smaller than expected size {ExpectedRowSize}.", nameof(body));
@@ -608,11 +632,11 @@ public readonly record struct PartNumberingRow(int Id, int SeriesId, int StartNu
             Bytes.I32(body, 8),
             Bytes.I32(body, 12),
             Bytes.I32(body, 16),
-            Bytes.Text(body, 20, 48, textEncoding));
+            Bytes.Text(body, 20, 48, textEncoding, codePage));
     }
 
     /// <summary>Decodes the body of <paramref name="row"/> into a <see cref="PartNumberingRow"/>.</summary>
-    public static PartNumberingRow Decode(TableRow row) => Decode(row.Body.Span, row.TextEncoding);
+    public static PartNumberingRow Decode(TableRow row) => Decode(row.Body.Span, row.Text?.Encoding, row.Text?.CodePage);
 }
 
 /// <summary>Decoded row of table 95 (<c>assembly_numbering</c>, size 76): assembly numbering series and mark prefix.</summary>
@@ -647,7 +671,10 @@ public readonly record struct AssemblyNumberingRow(
     /// <param name="body">The row body.</param>
     /// <param name="textEncoding">The encoding of the text values, or null to choose it from the bytes of each value:
     /// ASCII, UTF-8, then code page 1251 or 1252.</param>
-    public static AssemblyNumberingRow Decode(ReadOnlySpan<byte> body, Encoding? textEncoding)
+    public static AssemblyNumberingRow Decode(ReadOnlySpan<byte> body, Encoding? textEncoding) => Decode(body, textEncoding, null);
+
+    // codePage: the code page chosen for the whole file for the values that are neither ASCII nor UTF-8 (RowText).
+    internal static AssemblyNumberingRow Decode(ReadOnlySpan<byte> body, Encoding? textEncoding, int? codePage)
     {
         if (body.Length < ExpectedRowSize)
             throw new ArgumentException($"Row body length {body.Length} is smaller than expected size {ExpectedRowSize}.", nameof(body));
@@ -659,11 +686,11 @@ public readonly record struct AssemblyNumberingRow(
             Bytes.I32(body, 16),
             Bytes.I32(body, 20),
             Bytes.I32(body, 24),
-            Bytes.Text(body, 28, 48, textEncoding));
+            Bytes.Text(body, 28, 48, textEncoding, codePage));
     }
 
     /// <summary>Decodes the body of <paramref name="row"/> into an <see cref="AssemblyNumberingRow"/>.</summary>
-    public static AssemblyNumberingRow Decode(TableRow row) => Decode(row.Body.Span, row.TextEncoding);
+    public static AssemblyNumberingRow Decode(TableRow row) => Decode(row.Body.Span, row.Text?.Encoding, row.Text?.CodePage);
 }
 
 /// <summary>Decoded row of table 105 (<c>object_numbering</c>, size 12): object numbering association.</summary>

@@ -20,6 +20,7 @@ internal static class Cli
                tdbio tables <file> [--json]
                tdbio text <file> [--json]
                tdbio export <file> [output] [--indent] [--scene-json] [--ifc] [--html]
+                      [--encoding ascii|utf-8|cp1251|cp1252]
                tdbio --help | -h | --version
 
         Commands:
@@ -39,7 +40,8 @@ internal static class Cli
           --scene-json  Export as IOScene neutral scene JSON instead of Tekla object model JSON.
           --ifc         Force export format to IFC STEP physical file.
           --html        Force export format to standalone interactive 3D WebGL HTML viewer.
-          --encoding    The encoding of a template or report, instead of detecting it (info only).
+          --encoding    The encoding of a template or report, or of the text values of a model database (.db1)
+                        or DBV@ file, instead of detecting it (info, export).
 
         Warnings go to stderr and do not change the exit code.
         Exit codes: 0 done, 1 usage error, 2 input error (missing, malformed or unsupported file).
@@ -85,8 +87,8 @@ internal static class Cli
             if (command.Encoding != null)
             {
                 TdbFileKind kind = TdbFile.DetectKind(command.Path);
-                if (kind is not (TdbFileKind.Template or TdbFileKind.Report))
-                    throw new UsageException("Option '--encoding' applies to templates and reports only.");
+                if (kind is not (TdbFileKind.Template or TdbFileKind.Report or TdbFileKind.Db1 or TdbFileKind.Dbv))
+                    throw new UsageException("Option '--encoding' applies to templates, reports, model databases (.db1) and DBV@ files only.");
             }
 
             TdbDocument doc = TdbFile.Open(command.Path, new TdbReadOptions { TextEncoding = command.Encoding });
@@ -167,7 +169,7 @@ internal static class Cli
                 if (html) throw new UsageException("Option '--html' is repeated.");
                 html = true;
             }
-            else if (arg == "--encoding" && name == "info")
+            else if (arg == "--encoding" && name is ("info" or "export"))
             {
                 if (encodingName != null) throw new UsageException("Option '--encoding' is repeated.");
                 if (i + 1 == args.Length) throw new UsageException("Option '--encoding' needs a value.");

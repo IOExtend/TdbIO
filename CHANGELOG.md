@@ -35,7 +35,8 @@ API between minor releases.
   `IOScene`. `release.yml` publishes the packages to NuGet before it creates the GitHub release, and updates a release
   that an earlier run of the same tag left.
 - `tdbio info` prints the values it could read when a text section is broken, and reports that error.
-- `--encoding` is checked against the kind of the file before the file is opened.
+- `--encoding` is checked against the kind of the file before the file is opened. It applies to model databases and
+  DBV@ files as well as templates and reports, and `tdbio export` takes it.
 - The DSTV NC reader and the template lexer stream their lines and tokens instead of holding them as lists.
 - The gzip reader takes the unpacked size in the trailer as the initial size of its buffer.
 - Text rows with marker `0x0C` are rejected; only `0x04` was seen in text sections.
@@ -44,7 +45,8 @@ API between minor releases.
 
 - The text values of table rows are no longer required to be UTF-8. They are single-byte in the code page of the system
   that saved the model, so `ReadModel()` and `tdbio export` failed with `invalid UTF-8 string` on every model saved on a
-  non-English system. Each value is now read as ASCII, UTF-8, code page 1251 or 1252, in that order.
+  non-English system. Each value is now read as ASCII or UTF-8 when its bytes are, else in code page 1251 or 1252,
+  chosen once for the whole file.
 - `tdbio` no longer fails with an unhandled `ArgumentException` on a path of blanks, and `tdbio info` no longer fails as
   a whole when one text section of a model database is broken.
 - A template reports the offset of an error as a character offset of its text, and tuple nesting is limited like block

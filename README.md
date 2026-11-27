@@ -210,9 +210,10 @@ Values that differ from the ones always seen are kept and reported in `Warnings`
   between its start and end point, with the width and height estimated from the profile name (150 mm × 150 mm when the
   name gives none). These meshes are not Tekla solids and are not made for clash detection or exact measurement.
 - The text chains of model databases are given as bytes. The text values of decoded rows are single-byte in the code
-  page of the system that saved the model: ASCII, UTF-8, then code page 1251 or 1252 is chosen for each value, and
-  `TdbReadOptions.TextEncoding` sets one for the whole file. The choice between the two pages cannot tell Cyrillic from
-  Latin letters with diacritics, so give the encoding for a model saved with a Western European page.
+  page of the system that saved the model. A value is read as ASCII or UTF-8 when its bytes are; the other values are
+  read in code page 1251 or 1252, chosen once for the whole file. `TdbReadOptions.TextEncoding` (`--encoding` of the
+  command line tool) sets the encoding instead. The choice between the two pages cannot tell Cyrillic from Latin letters
+  with diacritics, so give the encoding for a model saved with a Western European page.
 - Drawing files are recognised but not read. Of `history.db` only the header is read.
 - Only gzip data with one member, header flags 0 and nothing after the trailer is accepted.
 - Templates and reports in UTF-16 are not supported. DSTV NC files must be ASCII with CR LF line breaks.

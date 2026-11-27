@@ -79,7 +79,11 @@ jobs:
           $flags = @()
           if ($tagName.Contains('-')) { $flags += '--prerelease' }
 
-          $exists = gh release view $tagName 2>&1
+          # Only a missing release goes on to create one; any other failure of the lookup (auth, network) stops here.
+          $view = gh release view $tagName 2>&1 | Out-String
+          if ($LASTEXITCODE -ne 0 -and $view -notmatch 'release not found') {
+            throw "gh release view failed with exit code ${LASTEXITCODE}: $view"
+          }
           if ($LASTEXITCODE -eq 0) {
             Write-Host "Updating existing release $tagName..."
             gh release edit $tagName --notes-file release-notes.md @flags

@@ -23,6 +23,14 @@ internal static class FormatError
         return e;
     }
 
+    /// <summary>The message of an error from <see cref="At(string, long)"/> without its <c> at offset 0x…</c> end, for an
+    /// error rethrown with an offset that counts from somewhere else.</summary>
+    public static string WithoutOffset(string message)
+    {
+        int cut = message.LastIndexOf(" at offset 0x", StringComparison.Ordinal);
+        return cut >= 0 ? message[..cut] : message;
+    }
+
     private static string WithOffset(string message, long offset) =>
         string.Create(CultureInfo.InvariantCulture, $"{message} at offset 0x{offset:X}");
 }

@@ -65,7 +65,8 @@ public sealed class CliTests : IDisposable
     [InlineData("tables", "a", "--encoding", "ascii")]
     [InlineData("export")]
     [InlineData("export", "a", "--indent", "--indent")]
-    [InlineData("export", "a", "--encoding", "ascii")]
+    [InlineData("export", "a", "--encoding")]
+    [InlineData("export", "a", "--encoding", "utf-16")]
     [InlineData("text", "-h")]
     [InlineData("--help", "x")]
     public void UsageErrorsExitOneWithTwoLines(params string[] args)
@@ -80,9 +81,9 @@ public sealed class CliTests : IDisposable
     }
 
     [Fact]
-    public void EncodingOnAModelFileIsAUsageError()
+    public void EncodingOnAFileWithoutTextValuesIsAUsageError()
     {
-        var (exit, stdout, _) = Run("info", Db1WithText(), "--encoding", "cp1251");
+        var (exit, stdout, _) = Run("info", File("p.nc1", Nc1File(Nc1Rectangle())), "--encoding", "cp1251");
         Assert.Equal(Cli.ExitUsage, exit);
         Assert.Equal("", stdout);
     }
@@ -603,6 +604,61 @@ public sealed class CliTests : IDisposable
                 Directory.Delete(linkDir, false);
             }
         }
+    }
+
+    [Fact]
+    public void ExportReadsTheTextValuesInTheGivenEncoding()
+    {
+        // A profile name of a model saved with code page 1252. Its bytes are all 0xC0 or above, which the detection
+        // reads as code page 1251; --encoding gives the right page.
+        var objBytes = new byte[ObjectRow.ExpectedRowSize];
+        BinaryPrimitives.WriteInt32LittleEndian(objBytes.AsSpan(0), 101);
+        BinaryPrimitives.WriteInt32LittleEndian(objBytes.AsSpan(28), 1);
+        var pointBytes1 = new byte[PointRow.ExpectedRowSize];
+        BinaryPrimitives.WriteInt32LittleEndian(pointBytes1.AsSpan(0), 201);
+        var pointBytes2 = new byte[PointRow.ExpectedRowSize];
+        BinaryPrimitives.WriteInt32LittleEndian(pointBytes2.AsSpan(0), 202);
+        BinaryPrimitives.WriteDoubleLittleEndian(pointBytes2.AsSpan(8), 1000.0);
+        var partAttrBytes = new byte[PartAttrRow.ExpectedRowSize];
+        BinaryPrimitives.WriteInt32LittleEndian(partAttrBytes.AsSpan(0), 501);
+        CodePagesEncodingProvider.Instance.GetEncoding(1252)!.GetBytes("été").CopyTo(partAttrBytes.AsSpan(116));
+        var partBytes = new byte[PartRow.ExpectedRowSize];
+        BinaryPrimitives.WriteInt32LittleEndian(partBytes.AsSpan(0), 101);
+        BinaryPrimitives.WriteInt32LittleEndian(partBytes.AsSpan(4), 501);
+        BinaryPrimitives.WriteInt32LittleEndian(partBytes.AsSpan(12), 201);
+        BinaryPrimitives.WriteInt32LittleEndian(partBytes.AsSpan(16), 202);
+        BinaryPrimitives.WriteDoubleLittleEndian(partBytes.AsSpan(56), 1000.0);
+        string path = File("cp1252.db1", Gzip(Db1TablesPayload(
+            Db1Section(null, 4, [1], (0x04, Counting(4), 1, 2)),
+            Db1Section(ObjectRow.TableKey, ObjectRow.ExpectedRowSize, [1], (0x04, objBytes, 1, 2)),
+            Db1Section(PointRow.TableKey, PointRow.ExpectedRowSize, [1, 1], (0x04, pointBytes1, 1, 2), (0x04, pointBytes2, 2, 3)),
+            Db1Section(PartAttrRow.TableKey, PartAttrRow.ExpectedRowSize, [1], (0x04, partAttrBytes, 1, 2)),
+            Db1Section(PartRow.TableKey, PartRow.ExpectedRowSize, [1], (0x04, partBytes, 1, 2)))));
+
+        static List<string?> Profiles(string json)
+        {
+            using var document = JsonDocument.Parse(json);
+            var found = new List<string?>();
+            void Walk(JsonElement e)
+            {
+                if (e.ValueKind == JsonValueKind.Object)
+                    foreach (var p in e.EnumerateObject())
+                        if (p.Name == "profile") found.Add(p.Value.GetString());
+                        else Walk(p.Value);
+                else if (e.ValueKind == JsonValueKind.Array)
+                    foreach (var item in e.EnumerateArray()) Walk(item);
+            }
+            Walk(document.RootElement);
+            return found;
+        }
+
+        var (exit, stdout, stderr) = Run("export", path, "--encoding", "cp1252");
+        Assert.True(exit == Cli.ExitOk, stderr);
+        Assert.Equal(["été"], Profiles(stdout));
+
+        var (plainExit, plain, plainErr) = Run("export", path);
+        Assert.True(plainExit == Cli.ExitOk, plainErr);
+        Assert.Equal(["йtй"], Profiles(plain));
     }
 
     [Fact]

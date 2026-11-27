@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 
 namespace TdbIO.Internal;
@@ -50,8 +51,8 @@ internal static class ModelBuilder
         }
 
         // The chunks of one chain are joined as bytes and decoded as one text value, with the rule for a row value and the
-        // encoding of the pool section, so a value split over chunks is decoded whole whatever its encoding.
-        Encoding? poolTextEncoding = FindSection(sections, StringPoolRow.TableKey, StringPoolRow.ExpectedRowSize)?.TextEncoding;
+        // text rule of the file, so a value split over chunks is decoded whole whatever its encoding.
+        RowText? poolText = FindSection(sections, StringPoolRow.TableKey, StringPoolRow.ExpectedRowSize)?.Text;
         var stringPool = new Dictionary<int, string>(strPoolRows.Count);
         var rawBuffer = new List<byte>(128);
         var visitedInCurrentChain = new HashSet<int>();
@@ -92,12 +93,15 @@ internal static class ModelBuilder
 
             try
             {
-                stringPool[head.Id] = TextDecoding.DecodeUnmarked(rawBuffer.ToArray(), poolTextEncoding, out _);
+                stringPool[head.Id] = TextDecoding.DecodeUnmarked(rawBuffer.ToArray(), poolText?.Encoding, out _, poolText?.CodePage);
             }
-            // The offset of TextDecoding counts from the start of the joined chain; a joined chain has no offset in the file.
-            catch (InvalidDataException e)
+            // The offset of TextDecoding counts from the start of the joined chain, which has no offset in the file: name it
+            // as a byte of the chain, so that it is not read as an offset of the file.
+            catch (InvalidDataException e) when (e.Data[FormatError.OffsetKey] is long inner)
             {
-                throw new InvalidDataException($"string pool chain {head.Id}: {e.Message}", e.InnerException ?? e);
+                throw new InvalidDataException(string.Create(CultureInfo.InvariantCulture,
+                    $"string pool chain {head.Id}: {FormatError.WithoutOffset(e.Message)} at byte {inner} of the joined chunks"),
+                    e.InnerException ?? e);
             }
         }
 

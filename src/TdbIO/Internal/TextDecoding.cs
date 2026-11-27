@@ -30,10 +30,10 @@ internal static class TextDecoding
     }
 
     /// <summary>Decodes bytes that carry no byte order mark: as <paramref name="forced"/> when it is given, else ASCII,
-    /// UTF-8, then code page 1251 when at least half of the high bytes are 0xC0 or above, else code page 1252. This is
-    /// the order of the rule for templates and reports without its mark steps, and the rule for one text value of a
-    /// table row.</summary>
-    public static string DecodeUnmarked(ReadOnlySpan<byte> bytes, Encoding? forced, out string encodingName)
+    /// UTF-8, then <paramref name="codePage"/> when it is given, else code page 1251 when at least half of the high bytes
+    /// are 0xC0 or above, else code page 1252. This is the order of the rule for templates and reports without its mark
+    /// steps, and the rule for one text value of a table row, whose file gives the code page (<see cref="RowText"/>).</summary>
+    public static string DecodeUnmarked(ReadOnlySpan<byte> bytes, Encoding? forced, out string encodingName, int? codePage = null)
     {
         if (forced != null) return DecodeForced(bytes, forced, out encodingName, 0);
 
@@ -55,14 +55,34 @@ internal static class TextDecoding
             return Encoding.UTF8.GetString(bytes);
         }
 
-        int codePage = upper * 2 >= high ? 1251 : 1252;
-        encodingName = codePage == 1251 ? "cp1251" : "cp1252";
-        Encoding encoding = CodePagesEncodingProvider.Instance.GetEncoding(codePage, EncoderFallback.ExceptionFallback,
-            DecoderFallback.ExceptionFallback) ?? throw new InvalidOperationException($"Code page {codePage} is not available.");
+        int chosen = codePage ?? CodePageOf(high, upper);
+        encodingName = chosen == 1251 ? "cp1251" : "cp1252";
+        Encoding encoding = CodePagesEncodingProvider.Instance.GetEncoding(chosen, EncoderFallback.ExceptionFallback,
+            DecoderFallback.ExceptionFallback) ?? throw new InvalidOperationException($"Code page {chosen} is not available.");
         int undefined = FirstUndefined(bytes, encoding);
         if (undefined >= 0)
             throw FormatError.At($"byte 0x{bytes[undefined]:X2} is not defined in {encodingName}", undefined);
         return encoding.GetString(bytes);
+    }
+
+    /// <summary>The code page of text that is neither ASCII nor UTF-8 from its bytes from 0x80: 1251 when at least half
+    /// of them are 0xC0 or above (the letters of that page), else 1252.</summary>
+    public static int CodePageOf(long high, long upper) => upper * 2 >= high ? 1251 : 1252;
+
+    /// <summary>Adds the bytes from 0x80 of <paramref name="value"/> to the counts of <see cref="CodePageOf"/> when the
+    /// value is neither ASCII nor UTF-8, the only values a code page is chosen for.</summary>
+    public static void CountCodePageBytes(ReadOnlySpan<byte> value, ref long high, ref long upper)
+    {
+        int valueHigh = 0, valueUpper = 0;
+        foreach (byte b in value)
+        {
+            if (b < 0x80) continue;
+            valueHigh++;
+            if (b >= 0xC0) valueUpper++;
+        }
+        if (valueHigh == 0 || FirstInvalidUtf8(value) < 0) return;
+        high += valueHigh;
+        upper += valueUpper;
     }
 
     private static string DecodeForced(ReadOnlySpan<byte> bytes, Encoding forced, out string encodingName, long start)

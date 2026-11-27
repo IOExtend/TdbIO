@@ -73,7 +73,7 @@ public partial class VectorTests
     }
 
     // decoded_text_at_N_width_M: the text of the field at N of every row, decoded as the library decodes it: ASCII, UTF-8,
-    // code page 1251 or 1252 chosen from the bytes of the value.
+    // else code page 1251 or 1252 chosen once for the file.
     private static bool CheckDecodedRowText(string name, JsonProperty property, IReadOnlyList<TableSection> sections)
     {
         if (TableJson.DecodedTextKey.Match(property.Name) is not { Success: true } m) return false;
@@ -84,7 +84,7 @@ public partial class VectorTests
         Assert.True(values.Count == rows.Count, $"{name}: {property.Name} count");
         for (int i = 0; i < values.Count; i++)
         {
-            string actual = Bytes.Text(rows[i].Body.Span, at, width, null);
+            string actual = Bytes.Text(rows[i].Body.Span, at, width, rows[i].TextEncoding, rows[i].Text?.CodePage);
             Assert.True(string.Equals(values[i].GetString(), actual, StringComparison.Ordinal), $"{name}: {property.Name} row {i}");
         }
         return true;

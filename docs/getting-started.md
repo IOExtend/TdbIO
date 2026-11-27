@@ -20,10 +20,12 @@ tdbio text model.db1
 tdbio tables model.db1 --json
 ```
 
-`tables` also works on DBV@ files. For templates and reports, `--encoding` overrides the detected encoding:
+`tables` also works on DBV@ files. For templates and reports, and for the text values of a model database, `--encoding`
+overrides the detected encoding:
 
 ```sh
 tdbio info list.tpl --encoding cp1252
+tdbio export model.db1 model.json --encoding cp1252
 ```
 
 Run `tdbio --help` for the usage. Exit code 0 means done, 1 a wrong command line, 2 a file that cannot be used. Every

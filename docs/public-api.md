@@ -119,10 +119,11 @@ Typed record structs decoded from the row bodies of the most common model databa
 | `BoltHolePointsRow` | 142 | 60 | `BoltId`, intermediate coordinates `IntPoint1X`, `IntPoint1Y`, `IntPoint1Z`, `IntPoint2X`, `IntPoint2Y`, `IntPoint2Z`, `NumHoles`. |
 
 The text values of a decoded row are zero-terminated and single-byte in the code page of the system that saved the
-model, and nothing in the file names that page. Without a given encoding each value is read by the order for templates
-and reports without its byte order mark steps: `ascii`, `utf-8`, then `cp1251` or `cp1252`. A byte the chosen page does not
-define is an `InvalidDataException` at its offset in the row body. Every record struct with text also has
-`Decode(ReadOnlySpan<byte>, Encoding)` to read the values in a given encoding.
+model, and nothing in the file names that page. Without a given encoding each value is `ascii` or `utf-8` when its bytes
+are, else it is read in `cp1251` or `cp1252`, the page chosen once for the whole file from all such values of the typed
+tables. A byte the chosen page does not define is an `InvalidDataException` at its offset in the row body. Every
+record struct with text also has `Decode(ReadOnlySpan<byte>, Encoding)` to read the values in a given encoding; given a
+body alone, without its file, it chooses the page from the bytes of each value.
 
 ## Object model: parts, assemblies, bolts and welds
 
@@ -175,10 +176,12 @@ least half of the bytes from 0x80 are 0xC0 or above, else `cp1252`. One encoding
 chosen code page does not define is an `InvalidDataException` at its offset: bytes are never replaced to make the text
 decode. A forced encoding is used as given, without its own byte order mark.
 
-The text values of table rows follow the same order for each value, without the byte order mark steps, and
-`TdbReadOptions.TextEncoding` given to `TdbFile.Open` applies to them as well. The choice between `cp1251` and `cp1252`
+The text values of table rows follow the same order without the byte order mark steps, and
+`TdbReadOptions.TextEncoding` given to `TdbFile.Open` applies to them as well. Each value is `ascii` or `utf-8` when its
+bytes are; for the other values one code page is chosen for the whole file, counting the bytes from 0x80 of all of them,
+because a short value such as `№5` holds too few bytes to tell the pages apart. The choice between `cp1251` and `cp1252`
 counts bytes from 0xC0, which hold Cyrillic letters in 1251 and Latin letters with diacritics in 1252: give the encoding
-for a model saved with a Western European page.
+for a model saved with a Western European page (`tdbio export --encoding cp1252`).
 
 ## Limits
 
