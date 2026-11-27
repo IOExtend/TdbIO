@@ -31,9 +31,10 @@ public sealed class TdbReadOptions
     /// the table rows of model databases and DBV@ files (<see cref="TableRow.TextEncoding"/>), used as given. When null
     /// (the default) the encoding is chosen from the bytes: for a template or report UTF-8 after a byte order mark, ASCII,
     /// UTF-8, then code page 1251 or 1252; for each text value of a row ASCII or UTF-8 when its bytes are, else code page
-    /// 1251 or 1252 chosen once for the whole file from all such values. The text of a model is single-byte in the code
-    /// page of the system that saved it, and nothing in the file names that page. The choice between the two pages counts
-    /// bytes from 0xC0, which hold Cyrillic letters in 1251 and Latin letters with diacritics in 1252: give the encoding
-    /// for a model saved with a Western European page.</summary>
+    /// 1251 or 1252 chosen once for a model database from all such values (for each value in a DBV@ file, whose sections
+    /// have no table key). The text of a model is single-byte in the code page of the system that saved it, and nothing
+    /// in the file names that page. The choice between the two pages counts bytes from 0xC0, which hold Cyrillic letters
+    /// in 1251 and Latin letters with diacritics in 1252: give the encoding for a model saved with a Western European
+    /// page.</summary>
     public Encoding? TextEncoding { get; init; }
 }

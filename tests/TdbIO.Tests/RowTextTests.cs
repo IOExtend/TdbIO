@@ -154,6 +154,18 @@ public class RowTextTests
     }
 
     [Fact]
+    public void RowsOfTwoReadsOfTheSameFileAreEqual()
+    {
+        using var file = Db1WithAssemblyNames(Cp1251.GetBytes("Колонна"));
+        var document = Assert.IsType<Db1Document>(TdbFile.Open(file));
+        TableRow Read() => Assert.Single(Assert.Single(document.ReadTables(), s => s.Key is not null).Rows);
+
+        Assert.Equal(Read(), Read());
+        Assert.Equal(Read().GetHashCode(), Read().GetHashCode());
+        Assert.NotEqual(Read(), Read() with { Text = new RowText(Cp1252) });
+    }
+
+    [Fact]
     public void AsciiAndUtf8ValuesStayAsciiAndUtf8InAFileOfACodePage()
     {
         // The code page of the file is only for the values that are neither ASCII nor UTF-8.

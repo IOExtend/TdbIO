@@ -38,6 +38,15 @@ public readonly record struct TableRow(long Offset, byte Marker, ReadOnlyMemory<
     /// <summary>The text rule of the file the row was read from; null for a row built by a caller.</summary>
     internal Internal.RowText? Text { get; init; }
 
+    /// <summary>True when both rows have the same offset, marker, body, numbers after the body and text rule. Each read
+    /// of the sections builds its own text rule, so the rule is compared by its values, not by reference.</summary>
+    public bool Equals(TableRow other) =>
+        Offset == other.Offset && Marker == other.Marker && Body.Equals(other.Body) && A == other.A && B == other.B
+        && Equals(TextEncoding, other.TextEncoding) && Text?.CodePage == other.Text?.CodePage;
+
+    /// <inheritdoc/>
+    public override int GetHashCode() => HashCode.Combine(Offset, Marker, Body, A, B, TextEncoding, Text?.CodePage);
+
     /// <summary>Decodes the row body as an <see cref="ObjectRow"/> (table 1, size 72).</summary>
     public ObjectRow AsObject() => ObjectRow.Decode(this);
 

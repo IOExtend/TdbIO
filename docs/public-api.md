@@ -178,8 +178,9 @@ decode. A forced encoding is used as given, without its own byte order mark.
 
 The text values of table rows follow the same order without the byte order mark steps, and
 `TdbReadOptions.TextEncoding` given to `TdbFile.Open` applies to them as well. Each value is `ascii` or `utf-8` when its
-bytes are; for the other values one code page is chosen for the whole file, counting the bytes from 0x80 of all of them,
-because a short value such as `№5` holds too few bytes to tell the pages apart. The choice between `cp1251` and `cp1252`
+bytes are; for the other values of a model database one code page is chosen for the whole file, counting the bytes
+from 0x80 of all of them in the typed tables, because a short value such as `№5` holds too few bytes to tell the pages
+apart. The sections of a DBV@ file have no table key, so there the page is chosen for each value. The choice between `cp1251` and `cp1252`
 counts bytes from 0xC0, which hold Cyrillic letters in 1251 and Latin letters with diacritics in 1252: give the encoding
 for a model saved with a Western European page (`tdbio export --encoding cp1252`).
 
