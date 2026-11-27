@@ -11,7 +11,12 @@ Structures: model databases (`.db1`, `.db2` and their `.bak` copies), DBV@ files
 - Tells the kind of a file from its content and opens it as a typed, read-only document.
 - Unpacks the gzip wrapper of model files and checks it (size, CRC-32), with a cap on the unpacked size.
 - Reads the header of model databases, the id map, the text chains and the date of each save stamp.
-- Walks the table sections of model databases and DBV@ files to the last byte. Rows are given as raw bytes.
+- Walks the table sections of model databases and DBV@ files to the last byte. Rows are given as raw bytes, and the
+  rows of the most used tables of a model database also as typed values.
+- Builds a read-only object model of a model database: parts, assemblies, bolts, welds, their points and attributes.
+- Writes the object model as JSON, or as IFC (IFC2x3 and IFC4) with each part approximated by a box.
+- Turns the object model into an IOScene scene document in metres (`TdbIO.Scene`), which the command line tool also
+  writes as a standalone HTML viewer.
 - Reads DSTV NC parts, the block tree of templates and the pages of reports.
 - Gives every value whose meaning is not known as stored, and reports values that differ from what is expected as
   warnings instead of failing.
@@ -34,8 +39,12 @@ Add the library to a .NET project:
 dotnet add package TdbIO
 ```
 
-The library targets .NET 8 and .NET 10. It is managed code without package dependencies, native code or Windows-only
-APIs.
+The library targets .NET 8 and .NET 10. It uses managed code without package dependencies or native dependencies and
+is tested on Windows, Linux and macOS. So that an export never overwrites its input, the command line tool asks the
+operating system whether two paths name the same file (symbolic links, junctions, hard links).
+
+`TdbIO.Scene`, the adapter from the object model to an IOScene scene document, is in this repository
+(`src/TdbIO.Scene`). It is not on nuget.org yet.
 
 ## Command line
 
@@ -177,7 +186,7 @@ file name.
 
 | Files | Kind | Read | Given raw, not decoded |
 | --- | --- | --- | --- |
-| `.db1`, `xslib.db1` and their `.bak` copies | `Db1` | Header (version, model GUID), id map, text sections and chains, save stamp dates, table sections and rows | Row bodies, section keys and descriptors, the two numbers after each row, the id map values, the bytes before the first table section, text bytes from 0x80 |
+| `.db1`, `xslib.db1` and their `.bak` copies | `Db1` | Header (version, model GUID), id map, text sections and chains, save stamp dates, table sections and rows, typed rows of the most used tables, the object model (`ReadModel`) | Rows of the other tables, the meaning of section keys, descriptor words and of the two numbers after each row, the id map values, the bytes before the first table section, text bytes from 0x80 |
 | `.db2`, `xslib.db2` and their `.bak` copies | `Db2` | Header, records with key, row count and row size | Row content |
 | DBV@ files (gzip data that unpacks to `DBV@`) | `Dbv` | Name, GUID records, number lists, `C9` records, table sections and rows | Most numbers, row bodies |
 | `.idrm` | `IdRanges` | Next free value, ranges | One field of each range |
@@ -194,8 +203,12 @@ Values that differ from the ones always seen are kept and reported in `Warnings`
 
 - Version 0.1.0 is a preview. The API can change before 1.0.
 - Reading only. There is no support for writing or changing files.
-- The content of table rows and `.db2` rows is not decoded, so the library does not yet give parts, assemblies or other
-  model objects. Rows are given as raw bytes with their offsets.
+- Rows are decoded into typed values only for the most used tables of a model database. `.db2` rows and the rows of the
+  other tables are given as raw bytes with their offsets. The meaning of section keys, of descriptor words and of the
+  two numbers after each row is not established from the files.
+- Part geometry is not decoded from the file. The IFC output and the scene adapter draw each straight part as a box
+  between its start and end point, with the width and height estimated from the profile name (150 mm × 150 mm when the
+  name gives none). These meshes are not Tekla solids and are not made for clash detection or exact measurement.
 - The text of model databases is given as bytes: the encoding of bytes from 0x80 is not known.
 - Drawing files are recognised but not read. Of `history.db` only the header is read.
 - Only gzip data with one member, header flags 0 and nothing after the trailer is accepted.

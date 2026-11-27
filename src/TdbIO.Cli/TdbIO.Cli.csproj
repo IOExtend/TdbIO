@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <PackageId>TdbIO.Cli</PackageId>
-    <Description>Command line tool that reports the structure of Tekla Structures model files, DSTV NC files, templates and reports.</Description>
+    <Description>Command line tool that reads Tekla Structures files (.db1, .db2, .nc1, .tpl, .rpt, .xsr) without Tekla Structures and writes the object model as JSON, IFC, an IOScene scene or an HTML viewer.</Description>
     <OutputType>Exe</OutputType>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>tdbio</ToolCommandName>

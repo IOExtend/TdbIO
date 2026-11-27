@@ -25,6 +25,9 @@ jobs:
       - run: dotnet restore TdbIO.slnx
       - run: dotnet build TdbIO.slnx -c Release --no-restore
       - run: dotnet test TdbIO.slnx -c Release --no-build
+      # The native engine and its scene adapter without the IFC output (Ifc/). A separate artifact path keeps the
+      # regular build available; this build produces no package.
+      - run: dotnet build src/TdbIO.Scene/TdbIO.Scene.csproj -c Release -p:BuildNativeCoreOnly=true --artifacts-path native-core-check
       - if: matrix.os == 'windows-latest'
         run: dotnet pack TdbIO.slnx -c Release --no-build -o artifacts
       - if: matrix.os == 'windows-latest'

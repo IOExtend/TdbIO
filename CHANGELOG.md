@@ -4,6 +4,47 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html); versions before 1.0 may change the
 API between minor releases.
 
+## [Unreleased]
+
+### Added
+
+- `TableSection.Key` and `TableSection.Descriptors`: the key before a section and its descriptor words, as stored.
+  `TableRow.A` and `TableRow.B`: the two numbers after the body of a row.
+- Typed decoders for the rows of the most used tables of a model database, next to the raw bytes (`ObjectRow`,
+  `AssemblyRow`, `PartRow`, `PointRow` and others; `TableRow.AsPart()`, `TableSection.AsParts()`).
+- `Db1Document.ReadModel()`: a read-only object model (`TeklaModel`) of assemblies, parts, bolts, welds, their points and
+  their attributes.
+- JSON output of the object model: `TeklaModel.ToJson()` and `WriteJson`, and `tdbio export model.db1 model.json`.
+- IFC output of the object model: `TeklaModel.ToIfc()` and `WriteIfc` with `TeklaIfcExportOptions` (IFC2x3 and IFC4),
+  and `tdbio export model.db1 model.ifc`. Each straight part is approximated by a box.
+- The `TdbIO.Scene` package: `TdbSceneReader` turns the object model into an IOScene scene document in metres, and
+  `tdbio export model.db1 model.scene.json --scene-json` writes it.
+- A standalone HTML viewer of the scene: `tdbio export model.db1 viewer.html`.
+- Tests of the adapter in `TdbIO.Scene.Tests`, and test runs on Linux and macOS in CI.
+- `docs/versions.md`: differences between Tekla Structures versions.
+
+### Changed
+
+- The IFC output of the object model is kept apart from the native engine in `src/TdbIO/Ifc`. With
+  `BuildNativeCoreOnly=true` the engine is compiled without it, which CI does together with `TdbIO.Scene`; the package
+  keeps the same public types.
+- `dotnet pack` compares the public API of the library with the last published version.
+- `tools/pack-release.ps1` checks that `TdbIO.Scene` depends on exactly the packed `TdbIO` version and on a released
+  `IOScene`. `release.yml` publishes the packages to NuGet before it creates the GitHub release, and updates a release
+  that an earlier run of the same tag left.
+- `tdbio info` prints the values it could read when a text section is broken, and reports that error.
+- `--encoding` is checked against the kind of the file before the file is opened.
+- The DSTV NC reader and the template lexer stream their lines and tokens instead of holding them as lists.
+- The gzip reader takes the unpacked size in the trailer as the initial size of its buffer.
+- Text rows with marker `0x0C` are rejected; only `0x04` was seen in text sections.
+
+### Fixed
+
+- `tdbio` no longer fails with an unhandled `ArgumentException` on a path of blanks, and `tdbio info` no longer fails as
+  a whole when one text section of a model database is broken.
+- A template reports the offset of an error as a character offset of its text, and tuple nesting is limited like block
+  nesting.
+
 ## [0.1.0] - 2026-11-14
 
 First release of TdbIO.

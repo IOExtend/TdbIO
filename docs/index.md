@@ -10,12 +10,15 @@ Structures: model databases (`.db1`, `.db2` and their `.bak` copies), DBV@ files
 
 - Tells the kind of a file from its content and opens it as a typed, read-only document.
 - Reads the header of model databases, the id map, the text chains and the date of each save stamp.
-- Walks the table sections of model databases and DBV@ files to the last byte. Rows are given as raw bytes.
+- Walks the table sections of model databases and DBV@ files to the last byte. Rows are given as raw bytes, and the
+  rows of the most used tables of a model database also as typed values.
+- Builds a read-only object model of a model database (parts, assemblies, bolts, welds) and writes it as JSON or IFC.
 - Reads DSTV NC parts, the block tree of templates and the pages of reports.
 - Gives every value whose meaning is not known as stored, and reports unexpected values as warnings.
 
 The library targets .NET 8 and .NET 10, has no package dependencies and never writes to the console. Version 0.1.0 is a
-preview: the content of table rows is not yet decoded into model objects.
+preview: the object model, its exports and the `TdbIO.Scene` adapter are on the main branch and await their first
+release. Part geometry is approximated by boxes; see the limitations of the [README](https://github.com/IOExtend/TdbIO#limitations).
 
 ## Where to go next
 

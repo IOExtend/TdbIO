@@ -8,6 +8,11 @@
     <NoWarn>$(NoWarn);NU5104</NoWarn>
   </PropertyGroup>
 
+  <!-- The native build of the adapter (BuildNativeCoreOnly=true) is compiled against the native engine; it produces no package. -->
+  <PropertyGroup Condition="'$(BuildNativeCoreOnly)' == 'true'">
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\TdbIO\TdbIO.csproj" />
     <PackageReference Include="IOScene" />

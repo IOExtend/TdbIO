@@ -3,7 +3,9 @@ using System.Globalization;
 namespace TdbIO;
 
 /// <summary>Represents an in-memory, read-only object model decoded from a Tekla Structures model database (.db1).</summary>
-public sealed class TeklaModel
+/// <remarks>The IFC output of the model is in <c>Ifc/TeklaModel.Ifc.cs</c>: it is not part of the native engine build
+/// (<c>BuildNativeCoreOnly</c>), which the scene adapter is compiled against.</remarks>
+public sealed partial class TeklaModel
 {
     private readonly Dictionary<int, ModelObject> _objectsById;
     private readonly Dictionary<Guid, ModelObject> _objectsByGuid;
@@ -103,21 +105,6 @@ public sealed class TeklaModel
     /// <summary>Writes the decoded model as JSON using a <see cref="System.Text.Json.Utf8JsonWriter"/>.</summary>
     /// <param name="writer">The UTF-8 JSON writer.</param>
     public void WriteJson(System.Text.Json.Utf8JsonWriter writer) => Internal.ModelJsonWriter.Write(this, writer);
-
-    /// <summary>Serializes the decoded model to an IFC STEP physical file string.</summary>
-    /// <param name="options">Options controlling IFC export, or <c>null</c> for defaults.</param>
-    /// <returns>An IFC STEP string representation of the model.</returns>
-    public string ToIfc(TeklaIfcExportOptions? options = null) => Internal.Export.IfcExporter.ToString(this, options);
-
-    /// <summary>Writes the decoded model as an IFC STEP physical file to a stream.</summary>
-    /// <param name="stream">The output stream.</param>
-    /// <param name="options">Options controlling IFC export, or <c>null</c> for defaults.</param>
-    public void WriteIfc(Stream stream, TeklaIfcExportOptions? options = null) => Internal.Export.IfcExporter.Write(this, stream, options);
-
-    /// <summary>Writes the decoded model as an IFC STEP physical file to a file path.</summary>
-    /// <param name="path">The destination file path.</param>
-    /// <param name="options">Options controlling IFC export, or <c>null</c> for defaults.</param>
-    public void WriteIfc(string path, TeklaIfcExportOptions? options = null) => Internal.Export.IfcExporter.WriteFile(this, path, options);
 
     /// <summary>Validates that all geometric coordinates, lengths and numeric attributes are finite floating-point numbers.</summary>
     /// <exception cref="InvalidDataException">Thrown when any coordinate, dimension or numeric attribute is NaN or Infinity.</exception>
@@ -232,8 +219,8 @@ public class ModelObject
 
     /// <summary>The 22-character buildingSMART IFC GlobalId corresponding to <see cref="Guid"/>, or derived from <see cref="Id"/>.</summary>
     public string IfcGuid => Guid != Guid.Empty
-        ? Internal.Export.IfcGuid.ToIfcGuid(Guid)
-        : Internal.Export.IfcGuid.FromElementId(Id, GetType().Name);
+        ? Internal.IfcGuid.ToIfcGuid(Guid)
+        : Internal.IfcGuid.FromElementId(Id, GetType().Name);
 
     /// <summary>The object type code (e.g. 1 for part, 2 for assembly, 3 for connection, 9 for bolt, 13 for weld).</summary>
     public int Type { get; }
@@ -576,8 +563,8 @@ public readonly record struct ModelBoltHole(
 public static class TeklaIfcGuid
 {
     /// <summary>Converts a .NET Guid to a 22-character buildingSMART IFC GlobalId.</summary>
-    public static string ToIfcGuid(Guid guid) => Internal.Export.IfcGuid.ToIfcGuid(guid);
+    public static string ToIfcGuid(Guid guid) => Internal.IfcGuid.ToIfcGuid(guid);
 
     /// <summary>Generates a deterministic 22-character buildingSMART IFC GlobalId from an element identifier.</summary>
-    public static string FromElementId(int elemId, string ns = "Tekla") => Internal.Export.IfcGuid.FromElementId(elemId, ns);
+    public static string FromElementId(int elemId, string ns = "Tekla") => Internal.IfcGuid.FromElementId(elemId, ns);
 }

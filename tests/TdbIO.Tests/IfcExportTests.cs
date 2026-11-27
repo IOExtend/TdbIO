@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using TdbIO.Internal;
 using TdbIO.Internal.Export;
 using Xunit;
 
