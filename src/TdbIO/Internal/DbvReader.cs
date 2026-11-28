@@ -95,8 +95,7 @@ internal static class DbvReader
 
         var sections = SectionWalker.Walk(payload, (int)p, 0, SectionMode.Dbv, warnings, textEncoding);
         return new DbvDocument(warnings.AsReadOnly(), name, Array.AsReadOnly(prologue), Array.AsReadOnly(listHeader),
-            Array.AsReadOnly(records), b, c, Array.AsReadOnly(l1), Array.AsReadOnly(l2), Array.AsReadOnly(t), Array.AsReadOnly(c9),
-            sections, payload);
+            Array.AsReadOnly(records), b, t[1], t[4], Array.AsReadOnly(c9), sections, payload);
     }
 
     private static uint[] ReadU32s(ReadOnlySpan<byte> d, long at, int count)

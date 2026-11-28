@@ -51,7 +51,6 @@ public partial class SampleTests
                 var doc = DbvDocument.Create(Gzip.Unpack(File.ReadAllBytes(file), TablesReadLimit));
                 long end = doc.Sections.Count > 0 ? doc.Sections[^1].End : -1;
                 if (doc.Sections.Count > 0 && end != doc.Payload.Length) failures.Add($"{at}: the sections do not end at the end of the data");
-                if (doc.T[0] != doc.ListHeader[3]) failures.Add($"{at}: T[0] differs from A[3]");
                 for (int i = 0; i < doc.GuidRecords.Count; i++)
                     if (doc.GuidRecords[i].Index != i + 1) failures.Add($"{at}: GUID record {i + 1} has another index");
                 foreach (string warning in doc.Warnings) output.WriteLine($"{at}: warning: {warning}");

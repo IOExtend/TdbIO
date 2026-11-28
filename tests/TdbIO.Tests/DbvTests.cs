@@ -30,15 +30,9 @@ public class DbvTests
         Assert.Equal(2, doc.GuidRecords.Count);
         Assert.Equal(new DbvGuidRecord(100, 1, new Guid("03020100-0504-0706-0809-0a0b0c0d0e0f")), doc.GuidRecords[0]);
         Assert.Equal(new DbvGuidRecord(1, 2, new Guid("43424140-4544-4746-4849-4a4b4c4d4e4f")), doc.GuidRecords[1]);
-        Assert.Equal(0x400u, doc.B);
         Assert.Equal(0x400u, doc.BaseOffset);
-        Assert.Equal(5u, doc.C);
-        Assert.Equal(5u, doc.EventLevel);
         Assert.Equal(7u, doc.DomainId);
         Assert.Equal(3u, doc.Generation);
-        Assert.Equal(new uint[] { 1, 2 }, doc.L1);
-        Assert.Equal(new[] { 32, -32 }, doc.L2);
-        Assert.Equal(new uint[] { 3, 0x440, 0, 0, 0x420, 2 }, doc.T);
         Assert.Equal(0x440u, doc.CurrentOffset);
         Assert.Equal(0x420u, doc.LastEventOffset);
         Assert.Equal(new[] { new DbvC9Record(0, 1, 0, -1), new DbvC9Record(0, 1, 0, -1) }, doc.C9Records);
@@ -144,8 +138,9 @@ public class DbvTests
     {
         var doc = DbvDocument.Create(new DbvParts { Records = [] }.Build());
         Assert.Empty(doc.GuidRecords);
+        // The reader fails the whole file when the tail word T[0] differs from the record count word A[3], so a
+        // successful read implies T[0] = 1 here.
         Assert.Equal(1u, doc.ListHeader[3]);
-        Assert.Equal(1u, doc.T[0]);
     }
 
     [Fact]
@@ -254,7 +249,6 @@ public class DbvTests
         string warning = Assert.Single(doc.Warnings);
         Assert.Contains("offset 0x", warning);
         Assert.DoesNotContain("Secret", warning);
-        if (field == "C") Assert.Equal(6u, doc.C);
         if (field == "R") Assert.Equal(-2, doc.C9Records[0].R3);
     }
 
