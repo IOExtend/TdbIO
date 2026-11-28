@@ -447,7 +447,7 @@ public sealed class CliTests : IDisposable
         string[] htmlWarnings = Lines(htmlErr);
         Assert.Equal(2, htmlWarnings.Length);
         Assert.StartsWith("tdbio: warning: 1 part has no usable geometry:", htmlWarnings[0]);
-        Assert.StartsWith("tdbio: warning:   Part '", htmlWarnings[1]);
+        Assert.StartsWith("tdbio: warning:   Part ", htmlWarnings[1]);
         Assert.True(System.IO.File.Exists(htmlOut));
         Assert.Contains("<!DOCTYPE html>", System.IO.File.ReadAllText(htmlOut));
 
@@ -763,15 +763,14 @@ public sealed class CliTests : IDisposable
         // 2. IFC export succeeds
         var (ifcExit, ifcOut, ifcErr) = Run("export", nanoFile, "--ifc");
         Assert.Equal(Cli.ExitOk, ifcExit);
-        Assert.Empty(ifcErr);
+        Assert.StartsWith("tdbio: warning: 1 of 1 part uses rectangular proxy boxes", Assert.Single(Lines(ifcErr)));
+        Assert.DoesNotContain("tdbio: warning:", ifcOut, StringComparison.Ordinal);
         Assert.Contains("CUSTOM_NANO200", ifcOut);
 
         // 3. Scene JSON export succeeds: the proxy box of the recognized profile is a warning on standard error only
         var (sceneExit, sceneOut, sceneErr) = Run("export", nanoFile, "--scene-json");
         Assert.Equal(Cli.ExitOk, sceneExit);
-        string[] sceneWarnings = Lines(sceneErr);
-        string sceneWarning = Assert.Single(sceneWarnings);
-        Assert.StartsWith("tdbio: warning: 1 of 1 part uses rectangular proxy boxes", sceneWarning);
+        Assert.Equal(ifcErr, sceneErr);
         Assert.Contains("CUSTOM_NANO200", sceneOut);
         Assert.DoesNotContain("tdbio: warning:", sceneOut, StringComparison.Ordinal);
 

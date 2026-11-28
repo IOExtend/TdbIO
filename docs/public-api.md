@@ -150,7 +150,7 @@ High-level connected object model produced by `Db1Document.ReadModel()`:
 | `TdbSceneReader` | `Read(path, options)` and `Read(model, options)` convert a model database or an in-memory model into a scene. |
 | `TdbSceneOptions` | `ModelKey`, `IncludeBolts`, `IncludeWelds`, `GenerateGeometry` (all true by default). |
 | `TdbSceneResult` | `Document` (the scene), `Diagnostics` (the structural validation of the scene), `GeometryDiagnostics`, `MetresPerUnit`, `ElementCount`, `PartCount`, `ElementsWithGeometry`, `GeometryCount`. |
-| `TdbGeometryDiagnostic` | One finding about the geometry of a part: `Kind` (`ProxyBox`, `FallbackDimensions`, `NoGeometry`), `ElementId`, `SourceId`, `Profile`, `Message`. Every mesh is a rectangular proxy box around the part axis, not the decoded Tekla solid; the scene is for viewing, not for clash detection or exact measurement. |
+| `TdbGeometryDiagnostic` | One finding about the geometry of a part: `Kind` (`FallbackDimensions`, `NoGeometry`), `ElementId`, `SourceId`, `Profile`, `Message` (names the part by `SourceId`, no text from the file). Every mesh is a rectangular proxy box around the part axis, not the decoded Tekla solid, and `ElementsWithGeometry` counts them; the scene is for viewing, not for clash detection or exact measurement. A part without `FallbackDimensions` has a size estimated from the numbers in its profile name, which does not check the profile. |
 
 ## Files next to the model
 

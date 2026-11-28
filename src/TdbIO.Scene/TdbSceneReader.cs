@@ -10,8 +10,8 @@ namespace TdbIO.Scene;
 /// <summary>
 /// Converts Tekla Structures models (<see cref="TeklaModel"/>) or model files into an <see cref="SceneDocument"/>.
 /// The geometry of the scene is approximate: every part is a rectangular proxy box between its start and end point,
-/// never the decoded Tekla solid. <see cref="TdbSceneResult.GeometryDiagnostics"/> reports the proxy boxes, the
-/// fallback dimensions and the parts without a usable axis.
+/// never the decoded Tekla solid. <see cref="TdbSceneResult.GeometryDiagnostics"/> reports the parts
+/// whose proxy box has the default dimensions and the parts that got no mesh.
 /// </summary>
 public static class TdbSceneReader
 {
@@ -254,16 +254,17 @@ public static class TdbSceneReader
             }
 
             // Geometry (in metres, scale factor 0.001): a rectangular proxy box around the part axis, never the decoded
-            // Tekla solid. Every part with a proxy box, with fallback dimensions and without a usable axis is reported.
+            // Tekla solid. A part with default dimensions or without a mesh is reported, named by its source id: a warning
+            // never holds text from the file.
             if (options.GenerateGeometry)
             {
                 if (part.StartPoint.HasValue && part.EndPoint.HasValue)
                 {
-                    var (geomVertices, geomNormals, geomIndices, degenerateAxis, profileRecognized) = BuildBoxMesh(part.StartPoint.Value, part.EndPoint.Value, part.Profile, 0.001);
+                    var (geomVertices, geomNormals, geomIndices, degenerateAxis, dimensionsFromName) = BuildBoxMesh(part.StartPoint.Value, part.EndPoint.Value, part.Profile, 0.001);
                     if (degenerateAxis)
                     {
                         geometryDiagnostics.Add(new(TdbGeometryDiagnosticKind.NoGeometry, partId, partElement.SourceId, part.Profile,
-                            string.Create(CultureInfo.InvariantCulture, $"Part '{partName}': the start and end points coincide, the axis is degenerate; no mesh was emitted.")));
+                            string.Create(CultureInfo.InvariantCulture, $"Part {partElement.SourceId}: the start and end points coincide, the axis is degenerate; no mesh was emitted.")));
                     }
                     else if (geomVertices.Count > 0)
                     {
@@ -286,19 +287,17 @@ public static class TdbSceneReader
                         });
 
                         elementsWithGeometry++;
-                        geometryDiagnostics.Add(new(TdbGeometryDiagnosticKind.ProxyBox, partId, partElement.SourceId, part.Profile,
-                            string.Create(CultureInfo.InvariantCulture, $"Part '{partName}': the mesh is a rectangular proxy box around the part axis, not the decoded Tekla solid.")));
-                        if (!profileRecognized)
+                        if (!dimensionsFromName)
                         {
                             geometryDiagnostics.Add(new(TdbGeometryDiagnosticKind.FallbackDimensions, partId, partElement.SourceId, part.Profile,
-                                string.Create(CultureInfo.InvariantCulture, $"Part '{partName}': the profile was not recognized; the proxy box uses the default dimensions 150x150 mm.")));
+                                string.Create(CultureInfo.InvariantCulture, $"Part {partElement.SourceId}: no dimensions were read from the profile name; the proxy box uses the default dimensions 150x150 mm.")));
                         }
                     }
                 }
                 else
                 {
                     geometryDiagnostics.Add(new(TdbGeometryDiagnosticKind.NoGeometry, partId, partElement.SourceId, part.Profile,
-                        string.Create(CultureInfo.InvariantCulture, $"Part '{partName}': no start or end point; no mesh was emitted.")));
+                        string.Create(CultureInfo.InvariantCulture, $"Part {partElement.SourceId}: no start or end point; no mesh was emitted.")));
                 }
             }
         }
@@ -429,8 +428,9 @@ public static class TdbSceneReader
 
     /// <summary>Builds the proxy box of one straight part.</summary>
     /// <returns>The mesh; whether the two points coincide, so no mesh can be built; and whether the profile name gave
-    /// dimensions (false when the defaults were used).</returns>
-    private static (List<Vector3d> Vertices, List<Vector3d> Normals, List<int> Indices, bool DegenerateAxis, bool ProfileRecognized) BuildBoxMesh(
+    /// dimensions (false when the defaults were used). Dimensions read from a name are an estimate, not a check of the
+    /// profile.</returns>
+    private static (List<Vector3d> Vertices, List<Vector3d> Normals, List<int> Indices, bool DegenerateAxis, bool DimensionsFromName) BuildBoxMesh(
         ModelPoint p0, ModelPoint p1, string profile, double scale)
     {
         double dx = (p1.X - p0.X) * scale;
@@ -472,7 +472,7 @@ public static class TdbSceneReader
         double vY = dirZ * perpX - dirX * perpZ;
         double vZ = dirX * perpY - dirY * perpX;
 
-        (double hw, double hh, bool recognized) = EstimateProfileDimensions(profile, scale);
+        (double hw, double hh, bool fromName) = EstimateProfileDimensions(profile, scale);
 
         double x0 = p0.X * scale;
         double y0 = p0.Y * scale;
@@ -528,17 +528,17 @@ public static class TdbSceneReader
         AddFace(c2, c3, c7, c6, nTop);     // Top
         AddFace(c3, c0, c4, c7, nLeft);    // Left
 
-        return (vertices, normals, indices, false, recognized);
+        return (vertices, normals, indices, false, fromName);
     }
 
     /// <summary>Estimates the width and the height of the profile from its name, in metres.</summary>
     /// <returns>The half dimensions in metres, and whether the name gave dimensions (false when the defaults of
     /// 150 mm x 150 mm were used).</returns>
-    private static (double HalfWidth, double HalfHeight, bool Recognized) EstimateProfileDimensions(string profile, double scale)
+    private static (double HalfWidth, double HalfHeight, bool FromName) EstimateProfileDimensions(string profile, double scale)
     {
         double widthMm = 150.0;
         double heightMm = 150.0;
-        bool recognized = false;
+        bool fromName = false;
 
         if (!string.IsNullOrEmpty(profile))
         {
@@ -560,7 +560,7 @@ public static class TdbSceneReader
                     {
                         heightMm = t;
                         widthMm = w;
-                        recognized = true;
+                        fromName = true;
                     }
                 }
             }
@@ -574,7 +574,7 @@ public static class TdbSceneReader
                 {
                     heightMm = size;
                     widthMm = p.StartsWith("IPE") ? size * 0.5 : size;
-                    recognized = true;
+                    fromName = true;
                 }
             }
         }
@@ -584,6 +584,6 @@ public static class TdbSceneReader
             throw new InvalidDataException(string.Create(CultureInfo.InvariantCulture, $"Non-finite dimension in profile '{profile}'."));
         }
 
-        return (widthMm * 0.5 * scale, heightMm * 0.5 * scale, recognized);
+        return (widthMm * 0.5 * scale, heightMm * 0.5 * scale, fromName);
     }
 }

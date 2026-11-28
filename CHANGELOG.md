@@ -25,9 +25,10 @@ API between minor releases.
 - Tests of the adapter in `TdbIO.Scene.Tests`, and test runs on Linux and macOS in CI.
 - `docs/versions.md`: differences between Tekla Structures versions.
 - Geometry diagnostics of the scene adapter: `TdbSceneResult.GeometryDiagnostics` (`TdbGeometryDiagnostic`) reports
-  the parts drawn as rectangular proxy boxes, the parts whose profile was not recognized (the proxy box falls back to
-  the default dimensions of 150 mm × 150 mm) and the parts without a usable geometry. `tdbio export --scene-json` and
-  the HTML viewer print them as warnings on standard error; the JSON and HTML output stay alone on standard output.
+  the parts whose proxy box has the default dimensions of 150 mm × 150 mm, because none were read from the profile
+  name, and the parts without a usable geometry; `TdbSceneResult.PartCount` counts the parts. The IFC, scene JSON and
+  HTML exports of `tdbio` warn on standard error how many parts are rectangular proxy boxes, and the last two also list
+  the findings. The warnings are not part of the exported data.
 
 ### Changed
 

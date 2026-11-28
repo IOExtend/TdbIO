@@ -388,6 +388,9 @@ internal static class Cli
 
         if (cmd.Ifc)
         {
+            // The parts the IFC output gives a body: those with both points.
+            int boxes = model.Parts.Count(part => part.StartPoint.HasValue && part.EndPoint.HasValue);
+            if (boxes > 0) geometryWarnings.Add(ProxyBoxWarning(boxes, model.Parts.Count));
             if (cmd.OutputPath != null)
             {
                 WriteFileAtomically(cmd.Path, cmd.OutputPath, tmp => model.WriteIfc(tmp));
@@ -473,32 +476,31 @@ internal static class Cli
         return geometryWarnings;
     }
 
-    // The warning lines for the geometry findings of a scene conversion: one summary line per kind and one detail line
-    // per part with fallback dimensions or without a usable geometry, up to DetailLimit parts per kind. Without the
-    // 'tdbio: warning: ' prefix; the caller adds it when the lines are written to standard error.
+    // The warning lines for the geometry of a scene conversion: one line for the proxy boxes, then for the parts with
+    // fallback dimensions and for those without a usable geometry a summary line and one detail line per part, up to
+    // DetailLimit parts per kind. Without the 'tdbio: warning: ' prefix; the caller adds it when the lines are written to
+    // standard error.
     private const int DetailLimit = 20;
+
+    private static string ProxyBoxWarning(int boxes, int parts) => string.Create(CultureInfo.InvariantCulture,
+        $"{boxes} of {parts} {Noun(parts, "part", "parts")} {Noun(boxes, "uses", "use")} rectangular proxy boxes instead of decoded Tekla solids; the meshes are for viewing, not for measurements.");
 
     internal static IReadOnlyList<string> SceneGeometryWarnings(TdbSceneResult result)
     {
         var lines = new List<string>();
-        int proxies = 0;
         var fallback = new List<TdbGeometryDiagnostic>();
         var none = new List<TdbGeometryDiagnostic>();
         foreach (var d in result.GeometryDiagnostics)
         {
             switch (d.Kind)
             {
-                case TdbGeometryDiagnosticKind.ProxyBox: proxies++; break;
                 case TdbGeometryDiagnosticKind.FallbackDimensions: fallback.Add(d); break;
                 case TdbGeometryDiagnosticKind.NoGeometry: none.Add(d); break;
             }
         }
-        if (proxies > 0)
-        {
-            lines.Add(string.Create(CultureInfo.InvariantCulture,
-                $"{proxies} of {result.PartCount} {Noun(result.PartCount, "part", "parts")} {Noun(proxies, "uses", "use")} rectangular proxy boxes instead of decoded Tekla solids; the meshes are for viewing, not for measurements."));
-        }
-        AddDetails(lines, fallback, Noun(fallback.Count, "part uses", "parts use") + " the default dimensions of 150x150 mm because the profile was not recognized:");
+        // Only parts have meshes, and each mesh is a proxy box.
+        if (result.ElementsWithGeometry > 0) lines.Add(ProxyBoxWarning(result.ElementsWithGeometry, result.PartCount));
+        AddDetails(lines, fallback, Noun(fallback.Count, "part uses", "parts use") + " the default dimensions of 150x150 mm because none were read from the profile name:");
         AddDetails(lines, none, Noun(none.Count, "part has", "parts have") + " no usable geometry:");
         return lines;
     }

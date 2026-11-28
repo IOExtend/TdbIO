@@ -190,28 +190,14 @@ public sealed class TdbSceneReaderTests
     }
 
     [Fact]
-    public void Read_RecognizedProfilesReportProxyBoxesWithoutFallback()
+    public void Read_ProfilesWithDimensionsReportNoGeometryFindings()
     {
         var result = TdbSceneReader.Read(CreateSyntheticModel(), new TdbSceneOptions { ModelKey = "test_model.db1" });
 
-        var partElems = result.Document.Elements.Where(e => e.Category == "Part").ToList();
-        Assert.Equal(2, partElems.Count);
-
-        // Every part with a mesh got exactly one proxy-box finding; no profile fell back to the defaults.
-        Assert.Equal(2, result.GeometryDiagnostics.Count(d => d.Kind == TdbGeometryDiagnosticKind.ProxyBox));
-        Assert.DoesNotContain(result.GeometryDiagnostics, d => d.Kind == TdbGeometryDiagnosticKind.FallbackDimensions);
-        Assert.Equal(result.ElementsWithGeometry, result.GeometryDiagnostics.Count(d => d.Kind == TdbGeometryDiagnosticKind.ProxyBox));
-
-        var beam = partElems.Single(p => p.TypeName == "HEA300");
-        var beamBox = Assert.Single(result.GeometryDiagnostics, d => d.ElementId == beam.Id);
-        Assert.Equal(beam.SourceId, beamBox.SourceId);
-        Assert.Equal("HEA300", beamBox.Profile);
-        Assert.Contains("proxy box", beamBox.Message);
-        Assert.Contains("not the decoded Tekla solid", beamBox.Message);
-
-        var column = partElems.Single(p => p.TypeName == "HEB300");
-        var columnBox = Assert.Single(result.GeometryDiagnostics, d => d.ElementId == column.Id);
-        Assert.Equal("HEB300", columnBox.Profile);
+        // Both parts got a proxy box, counted once for all of them; neither has default dimensions.
+        Assert.Equal(2, result.PartCount);
+        Assert.Equal(2, result.ElementsWithGeometry);
+        Assert.Empty(result.GeometryDiagnostics);
     }
 
     [Fact]
@@ -220,11 +206,14 @@ public sealed class TdbSceneReaderTests
         var model = SinglePartModel("ODD", new ModelPoint(1, 0, 0, 0), new ModelPoint(2, 6000, 0, 0));
         var result = TdbSceneReader.Read(model);
 
-        var box = Assert.Single(result.GeometryDiagnostics, d => d.Kind == TdbGeometryDiagnosticKind.ProxyBox);
-        var fallback = Assert.Single(result.GeometryDiagnostics, d => d.Kind == TdbGeometryDiagnosticKind.FallbackDimensions);
-        Assert.Equal(box.ElementId, fallback.ElementId);
+        var fallback = Assert.Single(result.GeometryDiagnostics);
+        Assert.Equal(TdbGeometryDiagnosticKind.FallbackDimensions, fallback.Kind);
+        var element = Assert.Single(result.Document.Elements, e => e.Category == "Part");
+        Assert.Equal(element.Id, fallback.ElementId);
+        Assert.Equal(element.SourceId, fallback.SourceId);
+        Assert.StartsWith($"Part {element.SourceId}: ", fallback.Message);
         Assert.Equal("ODD", fallback.Profile);
-        Assert.Contains("not recognized", fallback.Message);
+        Assert.Contains("no dimensions were read from the profile name", fallback.Message);
         Assert.Contains("150x150", fallback.Message);
 
         // The part still got its proxy box.
@@ -278,17 +267,36 @@ public sealed class TdbSceneReaderTests
         Assert.Equal(3, fallbackLines.Count);
         Assert.StartsWith("1 of 1 part uses rectangular proxy boxes", fallbackLines[0]);
         Assert.StartsWith("1 part uses the default dimensions", fallbackLines[1]);
-        Assert.StartsWith("  Part '", fallbackLines[2]);
+        Assert.StartsWith("  Part ", fallbackLines[2]);
 
         var noneLines = Cli.SceneGeometryWarnings(TdbSceneReader.Read(degenerate));
         Assert.Equal(2, noneLines.Count);
         Assert.StartsWith("1 part has no usable geometry:", noneLines[0]);
-        Assert.StartsWith("  Part '", noneLines[1]);
+        Assert.StartsWith("  Part ", noneLines[1]);
 
         var missingLines = Cli.SceneGeometryWarnings(TdbSceneReader.Read(missing));
         Assert.Equal(2, missingLines.Count);
         Assert.StartsWith("1 part has no usable geometry:", missingLines[0]);
         Assert.DoesNotContain("proxy boxes", missingLines[0], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SceneGeometryWarnings_HoldNoTextFromTheModel()
+    {
+        // A name and a profile that would break the line, forge a warning and send an escape sequence to a terminal.
+        const string hostile = "B1\ntdbio: warning: forged\u001b[2J";
+        var p0 = new ModelPoint(1, 0, 0, 0);
+        foreach (var end in new ModelPoint?[] { new ModelPoint(2, 6000, 0, 0), new ModelPoint(2, 0, 0, 0), null })
+        {
+            var result = TdbSceneReader.Read(SinglePartModel("ODD" + hostile, p0, end, hostile));
+
+            var lines = Cli.SceneGeometryWarnings(result);
+
+            Assert.All(lines, l => Assert.DoesNotContain(l, char.IsControl));
+            Assert.All(lines, l => Assert.DoesNotContain("forged", l, StringComparison.Ordinal));
+            string sourceId = Assert.Single(result.GeometryDiagnostics).SourceId;
+            Assert.StartsWith($"  Part {sourceId}: ", lines[^1]);
+        }
     }
 
     [Fact]
@@ -325,7 +333,7 @@ public sealed class TdbSceneReaderTests
         Assert.Equal(23, lines.Count); // the proxy summary, the fallback summary, 20 details and the tail
         Assert.StartsWith("25 of 25 parts use rectangular proxy boxes", lines[0]);
         Assert.StartsWith("25 parts use the default dimensions", lines[1]);
-        Assert.Equal(20, lines.Skip(2).Take(20).Count(l => l.StartsWith("  Part '", StringComparison.Ordinal)));
+        Assert.Equal(20, lines.Skip(2).Take(20).Count(l => l.StartsWith("  Part ", StringComparison.Ordinal)));
         Assert.StartsWith("  and 5 more parts", lines[22]);
     }
 
@@ -342,7 +350,7 @@ public sealed class TdbSceneReaderTests
         Assert.Contains("mutually exclusive", err.ToString());
     }
 
-    private static TeklaModel SinglePartModel(string profile, ModelPoint? p0, ModelPoint? p1)
+    private static TeklaModel SinglePartModel(string profile, ModelPoint? p0, ModelPoint? p1, string name = "TEST_PART")
     {
         var part = new ModelPart(
             id: 101,
@@ -352,7 +360,7 @@ public sealed class TdbSceneReaderTests
             phase: 1,
             parentId: null,
             assemblyId: null,
-            name: "TEST_PART",
+            name: name,
             profile: profile,
             material: "S355J2",
             prefix: "B",
