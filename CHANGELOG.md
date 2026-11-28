@@ -30,6 +30,13 @@ API between minor releases.
   HTML exports of `tdbio` warn on standard error how many parts are rectangular proxy boxes, and the last two also list
   the findings. The warnings are not part of the exported data.
 
+### Breaking
+
+- `DbvDocument`: the raw fields `B`, `C`, `L1`, `L2`, `T` and `EventLevel` are removed. The offsets of the domain
+  events stay as `BaseOffset`, `CurrentOffset` and `LastEventOffset`; the reader checks every other raw value
+  against the ones always seen and reports deviations in `Warnings`, and `Payload` holds the raw bytes. Raw values
+  of unknown meaning are named by byte offset everywhere (`Db1Document.IdMapField65` and `IdMapField73`).
+
 ### Changed
 
 - The IFC output of the object model is kept apart from the native engine in `src/TdbIO/Ifc`. With
@@ -45,7 +52,6 @@ API between minor releases.
 - The DSTV NC reader and the template lexer stream their lines and tokens instead of holding them as lists.
 - The gzip reader takes the unpacked size in the trailer as the initial size of its buffer.
 - Text rows with marker `0x0C` are rejected; only `0x04` was seen in text sections.
-
 ### Fixed
 
 - The text values of table rows are no longer required to be UTF-8. They are single-byte in the code page of the system

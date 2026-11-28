@@ -260,12 +260,21 @@ public partial class VectorTests
                 Assert.True(string.Equals(guid.GetProperty("bytes").GetString(), Convert.ToHexString(r.Id.ToByteArray()), StringComparison.OrdinalIgnoreCase),
                     $"{name}: guid record {i} bytes");
             }
-            Assert.True(expected.GetProperty("B").GetUInt32() == doc.B, $"{name}: B");
-            Assert.True(expected.GetProperty("C").GetUInt32() == doc.C, $"{name}: C");
-            Assert.True(expected.GetProperty("K").GetInt32() == doc.L1.Count, $"{name}: K");
-            Assert.True(TableJson.UInts(expected.GetProperty("L1")).SequenceEqual(doc.L1), $"{name}: L1");
-            Assert.True(TableJson.Ints(expected.GetProperty("L2")).SequenceEqual(doc.L2), $"{name}: L2");
-            Assert.True(TableJson.UInts(expected.GetProperty("T")).SequenceEqual(doc.T), $"{name}: T");
+            // The raw words B, C, K, L1, L2 and T are read back from the payload: the API no longer exposes them, and
+            // the reader checks their relations against the values always seen. The marker offset is computed above.
+            int bOff = marker + 20 + 24 * doc.GuidRecords.Count;
+            uint ReadU32(int at) => BinaryPrimitives.ReadUInt32LittleEndian(doc.Payload.Span.Slice(at, 4));
+            Assert.True(expected.GetProperty("B").GetUInt32() == doc.BaseOffset, $"{name}: B");
+            Assert.True(expected.GetProperty("B").GetUInt32() == ReadU32(bOff), $"{name}: B in the payload");
+            Assert.True(expected.GetProperty("C").GetUInt32() == ReadU32(bOff + 4), $"{name}: C");
+            int k = (int)ReadU32(bOff + 8);
+            Assert.True(expected.GetProperty("K").GetInt32() == k, $"{name}: K");
+            var l1 = Enumerable.Range(0, k).Select(i => ReadU32(bOff + 12 + 4 * i)).ToArray();
+            Assert.True(TableJson.UInts(expected.GetProperty("L1")).SequenceEqual(l1), $"{name}: L1");
+            var l2 = Enumerable.Range(0, k).Select(i => (int)ReadU32(bOff + 12 + 4 * k + 4 * i)).ToArray();
+            Assert.True(TableJson.Ints(expected.GetProperty("L2")).SequenceEqual(l2), $"{name}: L2");
+            var t = Enumerable.Range(0, 6).Select(i => ReadU32(bOff + 12 + 8 * k + 4 * i)).ToArray();
+            Assert.True(TableJson.UInts(expected.GetProperty("T")).SequenceEqual(t), $"{name}: T");
             var c9 = expected.GetProperty("c9_records").EnumerateArray().Select(r => TableJson.Ints(r).ToArray()).ToList();
             Assert.True(c9.Count == doc.C9Records.Count, $"{name}: c9_records");
             for (int i = 0; i < c9.Count; i++)
@@ -275,12 +284,12 @@ public partial class VectorTests
                 "guid_records", "B", "C", "K", "L1", "L2", "T", "c9_records" };
             if (expected.TryGetProperty("sum_L2", out var sum))
             {
-                Assert.True(sum.GetInt64() == doc.L2.Sum(v => (long)v), $"{name}: sum_L2");
+                Assert.True(sum.GetInt64() == l2.Sum(v => (long)v), $"{name}: sum_L2");
                 handled.Add("sum_L2");
             }
             if (expected.TryGetProperty("T1_minus_B_div_32", out var blocks))
             {
-                Assert.True(blocks.GetInt64() == (doc.T[1] - (long)doc.B) / 32, $"{name}: T1_minus_B_div_32");
+                Assert.True(blocks.GetInt64() == (t[1] - (long)doc.BaseOffset) / 32, $"{name}: T1_minus_B_div_32");
                 handled.Add("T1_minus_B_div_32");
             }
             if (expected.TryGetProperty("sections", out var sections))

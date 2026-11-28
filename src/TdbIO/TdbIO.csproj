@@ -7,9 +7,11 @@
     <AssemblyName>TdbIO</AssemblyName>
     <PackageId>TdbIO</PackageId>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <!-- dotnet pack compares the public API of both target frameworks with the last published release. -->
+    <!-- dotnet pack compares the public API of both target frameworks with the last published release.
+         The suppressions name the removals of issue #11; move the baseline to 0.2.0 when that version ships. -->
     <EnablePackageValidation>true</EnablePackageValidation>
     <PackageValidationBaselineVersion>0.1.0</PackageValidationBaselineVersion>
+    <ApiCompatSuppressionFile>$(MSBuildProjectDirectory)\CompatibilitySuppressions.xml</ApiCompatSuppressionFile>
   </PropertyGroup>
 
   <!-- The native engine is everything except the target-format output in Ifc. CI compiles it together with the scene

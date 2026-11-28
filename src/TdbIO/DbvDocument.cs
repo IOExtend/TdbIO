@@ -4,12 +4,13 @@ using TdbIO.Internal;
 namespace TdbIO;
 
 /// <summary>A gzip file whose content starts with <c>DBV@</c>: a name, a GUID list, a few lists of numbers and table
-/// sections. Most numbers have no known meaning and are given raw; values that differ from the ones always seen are kept
-/// and reported in <see cref="TdbDocument.Warnings"/>.</summary>
+/// sections. Raw values whose meaning is not known are not separate properties: the reader checks each of them against
+/// the values always seen, reports deviations in <see cref="TdbDocument.Warnings"/>, and <see cref="Payload"/> holds
+/// the raw bytes.</summary>
 public sealed class DbvDocument : TdbDocument
 {
     internal DbvDocument(IReadOnlyList<string> warnings, string name, IReadOnlyList<uint> prologue, IReadOnlyList<uint> listHeader,
-        IReadOnlyList<DbvGuidRecord> guidRecords, uint b, uint c, IReadOnlyList<uint> l1, IReadOnlyList<int> l2, IReadOnlyList<uint> t,
+        IReadOnlyList<DbvGuidRecord> guidRecords, uint baseOffset, uint currentOffset, uint lastEventOffset,
         IReadOnlyList<DbvC9Record> c9Records, IReadOnlyList<TableSection> sections, ReadOnlyMemory<byte> payload)
         : base(TdbFileKind.Dbv, warnings)
     {
@@ -17,11 +18,9 @@ public sealed class DbvDocument : TdbDocument
         Prologue = prologue;
         ListHeader = listHeader;
         GuidRecords = guidRecords;
-        B = b;
-        C = c;
-        L1 = l1;
-        L2 = l2;
-        T = t;
+        BaseOffset = baseOffset;
+        CurrentOffset = currentOffset;
+        LastEventOffset = lastEventOffset;
         C9Records = c9Records;
         Sections = sections;
         Payload = payload;
@@ -36,17 +35,17 @@ public sealed class DbvDocument : TdbDocument
     /// <summary>The generation/version number of the domain file (from <see cref="ListHeader"/> word 3), equals <c>GuidRecords.Count + 1</c>.</summary>
     public uint Generation => ListHeader[3];
 
-    /// <summary>The base byte offset of domain events (alias for <see cref="B"/>).</summary>
-    public uint BaseOffset => B;
+    /// <summary>The base byte offset of the domain events: the row enders of the sections lie inside the interval that
+    /// starts here and ends at <see cref="CurrentOffset"/>. The raw word is checked to be a multiple of 32.</summary>
+    public uint BaseOffset { get; }
 
-    /// <summary>The domain event level (alias for <see cref="C"/>; expected to be 5).</summary>
-    public uint EventLevel => C;
+    /// <summary>The byte offset after the domain events, which the reader checks to equal
+    /// <c>BaseOffset + 32 · K</c> for the length <c>K</c> stored before the lists.</summary>
+    public uint CurrentOffset { get; }
 
-    /// <summary>The current byte offset after domain events (from <see cref="T"/> word 1; equals <c>BaseOffset + 32 * L1.Count</c>).</summary>
-    public uint CurrentOffset => T[1];
-
-    /// <summary>The byte offset of the last domain event (from <see cref="T"/> word 4; equals <c>CurrentOffset - 32</c>).</summary>
-    public uint LastEventOffset => T[4];
+    /// <summary>The byte offset of the last domain event, which the reader checks to equal
+    /// <c>CurrentOffset − 32</c>.</summary>
+    public uint LastEventOffset { get; }
 
     /// <summary>The six raw numbers after the name.</summary>
     public IReadOnlyList<uint> Prologue { get; }
@@ -56,22 +55,6 @@ public sealed class DbvDocument : TdbDocument
 
     /// <summary>The GUID records in file order.</summary>
     public IReadOnlyList<DbvGuidRecord> GuidRecords { get; }
-
-    /// <summary>The raw number after the GUID records.</summary>
-    public uint B { get; }
-
-    /// <summary>The raw number after <see cref="B"/>.</summary>
-    public uint C { get; }
-
-    /// <summary>The first list of raw numbers; its length is stored before it.</summary>
-    public IReadOnlyList<uint> L1 { get; }
-
-    /// <summary>The second list of raw numbers, signed, as long as <see cref="L1"/>.</summary>
-    public IReadOnlyList<int> L2 { get; }
-
-    /// <summary>The six raw numbers after the lists. The first one equals the last number of <see cref="ListHeader"/>;
-    /// the last one is the number of <see cref="C9Records"/>.</summary>
-    public IReadOnlyList<uint> T { get; }
 
     /// <summary>The records that start with <c>C9 C0 CE DB</c>.</summary>
     public IReadOnlyList<DbvC9Record> C9Records { get; }
