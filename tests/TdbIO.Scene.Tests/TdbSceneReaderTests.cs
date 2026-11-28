@@ -190,6 +190,154 @@ public sealed class TdbSceneReaderTests
     }
 
     [Fact]
+    public void Read_ProfilesWithDimensionsReportNoGeometryFindings()
+    {
+        var result = TdbSceneReader.Read(CreateSyntheticModel(), new TdbSceneOptions { ModelKey = "test_model.db1" });
+
+        // Both parts got a proxy box, counted once for all of them; neither has default dimensions.
+        Assert.Equal(2, result.PartCount);
+        Assert.Equal(2, result.ElementsWithGeometry);
+        Assert.Empty(result.GeometryDiagnostics);
+    }
+
+    [Fact]
+    public void Read_UnrecognizedProfileReportsFallbackDimensions()
+    {
+        var model = SinglePartModel("ODD", new ModelPoint(1, 0, 0, 0), new ModelPoint(2, 6000, 0, 0));
+        var result = TdbSceneReader.Read(model);
+
+        var fallback = Assert.Single(result.GeometryDiagnostics);
+        Assert.Equal(TdbGeometryDiagnosticKind.FallbackDimensions, fallback.Kind);
+        var element = Assert.Single(result.Document.Elements, e => e.Category == "Part");
+        Assert.Equal(element.Id, fallback.ElementId);
+        Assert.Equal(element.SourceId, fallback.SourceId);
+        Assert.StartsWith($"Part {element.SourceId}: ", fallback.Message);
+        Assert.Equal("ODD", fallback.Profile);
+        Assert.Contains("no dimensions were read from the profile name", fallback.Message);
+        Assert.Contains("150x150", fallback.Message);
+
+        // The part still got its proxy box.
+        Assert.Equal(1, result.ElementsWithGeometry);
+        Assert.Single(result.Document.Instances);
+    }
+
+    [Fact]
+    public void Read_DegenerateAxisReportsNoGeometry()
+    {
+        var model = SinglePartModel("HEA300", new ModelPoint(1, 0, 0, 0), new ModelPoint(2, 0, 0, 0));
+        var result = TdbSceneReader.Read(model);
+
+        var none = Assert.Single(result.GeometryDiagnostics, d => d.Kind == TdbGeometryDiagnosticKind.NoGeometry);
+        Assert.Equal(0, result.ElementsWithGeometry);
+        Assert.Empty(result.Document.Instances);
+        Assert.Contains("coincide", none.Message);
+        Assert.Contains("degenerate", none.Message);
+        Assert.Equal("HEA300", none.Profile);
+    }
+
+    [Fact]
+    public void Read_MissingEndpointsReportNoGeometry()
+    {
+        var model = SinglePartModel("HEA300", null, null);
+        var result = TdbSceneReader.Read(model);
+
+        var none = Assert.Single(result.GeometryDiagnostics, d => d.Kind == TdbGeometryDiagnosticKind.NoGeometry);
+        Assert.Equal(0, result.ElementsWithGeometry);
+        Assert.Empty(result.Document.Instances);
+        Assert.Contains("no start or end point", none.Message);
+    }
+
+    [Fact]
+    public void SceneGeometryWarnings_SummarizeProxyBoxesAndListTheDetails()
+    {
+        var doc = Db1Document.Create(TdbIO.Tests.Synthetic.Db1Payload([]));
+        var p0 = new ModelPoint(1, 0, 0, 0);
+        var p1 = new ModelPoint(2, 6000, 0, 0);
+        var known = SinglePartModel("HEA300", p0, p1);
+        var fallback = SinglePartModel("ODD", p0, p1);
+        var degenerate = SinglePartModel("HEA300", p0, new ModelPoint(2, 0, 0, 0));
+        var missing = SinglePartModel("HEA300", null, null);
+
+        var knownLines = Cli.SceneGeometryWarnings(TdbSceneReader.Read(known));
+        var line = Assert.Single(knownLines);
+        Assert.StartsWith("1 of 1 part uses rectangular proxy boxes", line);
+        Assert.Contains("not for measurements", line);
+
+        var fallbackLines = Cli.SceneGeometryWarnings(TdbSceneReader.Read(fallback));
+        Assert.Equal(3, fallbackLines.Count);
+        Assert.StartsWith("1 of 1 part uses rectangular proxy boxes", fallbackLines[0]);
+        Assert.StartsWith("1 part uses the default dimensions", fallbackLines[1]);
+        Assert.StartsWith("  Part ", fallbackLines[2]);
+
+        var noneLines = Cli.SceneGeometryWarnings(TdbSceneReader.Read(degenerate));
+        Assert.Equal(2, noneLines.Count);
+        Assert.StartsWith("1 part has no usable geometry:", noneLines[0]);
+        Assert.StartsWith("  Part ", noneLines[1]);
+
+        var missingLines = Cli.SceneGeometryWarnings(TdbSceneReader.Read(missing));
+        Assert.Equal(2, missingLines.Count);
+        Assert.StartsWith("1 part has no usable geometry:", missingLines[0]);
+        Assert.DoesNotContain("proxy boxes", missingLines[0], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SceneGeometryWarnings_HoldNoTextFromTheModel()
+    {
+        // A name and a profile that would break the line, forge a warning and send an escape sequence to a terminal.
+        const string hostile = "B1\ntdbio: warning: forged\u001b[2J";
+        var p0 = new ModelPoint(1, 0, 0, 0);
+        foreach (var end in new ModelPoint?[] { new ModelPoint(2, 6000, 0, 0), new ModelPoint(2, 0, 0, 0), null })
+        {
+            var result = TdbSceneReader.Read(SinglePartModel("ODD" + hostile, p0, end, hostile));
+
+            var lines = Cli.SceneGeometryWarnings(result);
+
+            Assert.All(lines, l => Assert.DoesNotContain(l, char.IsControl));
+            Assert.All(lines, l => Assert.DoesNotContain("forged", l, StringComparison.Ordinal));
+            string sourceId = Assert.Single(result.GeometryDiagnostics).SourceId;
+            Assert.StartsWith($"  Part {sourceId}: ", lines[^1]);
+        }
+    }
+
+    [Fact]
+    public void SceneGeometryWarnings_CapsTheDetailLines()
+    {
+        var parts = new List<ModelPart>();
+        for (int i = 0; i < 25; i++)
+        {
+            parts.Add(new ModelPart(
+                id: 100 + i,
+                guid: Guid.NewGuid(),
+                type: 1,
+                subtype: 0,
+                phase: 1,
+                parentId: null,
+                assemblyId: null,
+                name: $"PART_{i}",
+                profile: "ODD",
+                material: "S355J2",
+                prefix: "B",
+                startNumber: 1,
+                positionNumber: 1,
+                @class: 3,
+                finish: "",
+                startPoint: new ModelPoint(i * 10 + 1, 0, 0, 0),
+                endPoint: new ModelPoint(i * 10 + 2, 6000, 0, 0),
+                length: 6000,
+                coordinateSystem: null));
+        }
+        var doc = Db1Document.Create(TdbIO.Tests.Synthetic.Db1Payload([]));
+        var model = new TeklaModel(doc, Guid.NewGuid(), assemblies: [], parts: parts, bolts: [], welds: [], objects: parts);
+
+        var lines = Cli.SceneGeometryWarnings(TdbSceneReader.Read(model));
+        Assert.Equal(23, lines.Count); // the proxy summary, the fallback summary, 20 details and the tail
+        Assert.StartsWith("25 of 25 parts use rectangular proxy boxes", lines[0]);
+        Assert.StartsWith("25 parts use the default dimensions", lines[1]);
+        Assert.Equal(20, lines.Skip(2).Take(20).Count(l => l.StartsWith("  Part ", StringComparison.Ordinal)));
+        Assert.StartsWith("  and 5 more parts", lines[22]);
+    }
+
+    [Fact]
     public void Cli_Export_CommandsWorkCorrectly()
     {
         // Test usage errors and options
@@ -200,6 +348,33 @@ public sealed class TdbSceneReaderTests
         int code = Cli.Run(["export", "dummy.db1", "--ifc", "--html"], @out, err);
         Assert.Equal(Cli.ExitUsage, code);
         Assert.Contains("mutually exclusive", err.ToString());
+    }
+
+    private static TeklaModel SinglePartModel(string profile, ModelPoint? p0, ModelPoint? p1, string name = "TEST_PART")
+    {
+        var part = new ModelPart(
+            id: 101,
+            guid: Guid.NewGuid(),
+            type: 1,
+            subtype: 0,
+            phase: 1,
+            parentId: null,
+            assemblyId: null,
+            name: name,
+            profile: profile,
+            material: "S355J2",
+            prefix: "B",
+            startNumber: 1,
+            positionNumber: 1,
+            @class: 3,
+            finish: "",
+            startPoint: p0,
+            endPoint: p1,
+            length: p0 != null && p1 != null ? 6000 : 0,
+            coordinateSystem: null);
+
+        var doc = Db1Document.Create(TdbIO.Tests.Synthetic.Db1Payload([]));
+        return new TeklaModel(doc, Guid.NewGuid(), assemblies: [], parts: [part], bolts: [], welds: [], objects: [part]);
     }
 
     private static TeklaModel CreateSyntheticModel()

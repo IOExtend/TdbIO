@@ -22,6 +22,7 @@ Usage: tdbio info <file> [--json] [--encoding ascii|utf-8|cp1251|cp1252]
 | `tdbio info <file>` | every supported kind | `key: value` lines: the kind, its main values and the number of warnings. |
 | `tdbio tables <file>` | model databases (`.db1`), DBV@ files | A tab-separated header line, then one line per table section. |
 | `tdbio text <file>` | model databases (`.db1`) | A tab-separated header line, then one line per text chain, then one line per orphan row. |
+| `tdbio export <file> [output]` | model databases (`.db1`) | The object model as JSON (default), or with an option: `--ifc` (IFC), `--scene-json` (an IOScene scene), or no format option and an `.html` output (a standalone viewer). |
 | `tdbio --help`, `tdbio -h` | | The usage text, on standard output. |
 | `tdbio --version` | | `tdbio <version>`, for example `tdbio 0.1.0`. |
 
@@ -37,6 +38,21 @@ from its extension (reports, which have no signature, are recognised by the `.xs
 
 An option given twice is a usage error.
 
+## Geometry warnings of an export
+
+The IFC, scene JSON and HTML viewer exports draw every part as a rectangular proxy box between its start and end point,
+with the width and height estimated from the numbers in the profile name (150 mm × 150 mm when none are read). The
+estimate does not check the profile. The meshes are not decoded Tekla solids and are not made for clash detection or
+exact measurement. The warnings go to standard error, so the output on standard output or in the file holds none of
+them, and they do not change the exit code. The JSON export of the object model has no geometry and no such warning.
+
+All three exports print one line with the number of proxy boxes. The scene JSON export (`--scene-json`) and the HTML
+viewer export build the scene of the `TdbIO.Scene` adapter and then also print, each after a summary line, one line per
+part whose box has the default dimensions and one line per part with no usable geometry (no start or end point, or a
+degenerate axis). A part is named by its GUID, or `part:{id}` when it has none. Up to 20 parts per kind are listed; the
+summary line counts them all, and the full list is in `TdbSceneResult.GeometryDiagnostics`. The IFC export prints only
+the line with the number of boxes.
+
 ## Exit codes
 
 | Code | Name | Meaning |
@@ -49,8 +65,8 @@ The whole output is built before anything is written, so a failing command write
 message about malformed data ends with the offset of the problem, for example
 `tdbio: not a recognised Tekla file at offset 0x0`.
 
-Warnings are written after the output, one line each: `tdbio: warning: <warning>`. They name an offset or a line, never
-text from the file.
+Warnings are written after the output, one line each: `tdbio: warning: <warning>`. They name an offset, a line, or, for
+the [geometry warnings](#geometry-warnings-of-an-export), a part by its GUID or number, never text from the file.
 
 ## info
 

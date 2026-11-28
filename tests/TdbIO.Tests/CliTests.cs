@@ -440,21 +440,26 @@ public sealed class CliTests : IDisposable
         Assert.True(System.IO.File.Exists(ifcOut));
         Assert.Contains("ISO-10303-21;", System.IO.File.ReadAllText(ifcOut));
 
-        // 2. Export to HTML viewer file
+        // 2. Export to HTML viewer file: the part has no endpoints, so the scene conversion warns on standard error
         string htmlOut = Path.Combine(_folder, "model.html");
         var (htmlExit, _, htmlErr) = Run("export", okFile, htmlOut);
         Assert.Equal(Cli.ExitOk, htmlExit);
-        Assert.Empty(htmlErr);
+        string[] htmlWarnings = Lines(htmlErr);
+        Assert.Equal(2, htmlWarnings.Length);
+        Assert.StartsWith("tdbio: warning: 1 part has no usable geometry:", htmlWarnings[0]);
+        Assert.StartsWith("tdbio: warning:   Part ", htmlWarnings[1]);
         Assert.True(System.IO.File.Exists(htmlOut));
         Assert.Contains("<!DOCTYPE html>", System.IO.File.ReadAllText(htmlOut));
 
-        // 3. Export to Scene JSON file
+        // 3. Export to Scene JSON file: the same warnings, and the JSON file stays free of them
         string sceneJsonOut = Path.Combine(_folder, "model.scene.json");
         var (sceneExit, _, sceneErr) = Run("export", okFile, sceneJsonOut, "--scene-json");
         Assert.Equal(Cli.ExitOk, sceneExit);
-        Assert.Empty(sceneErr);
+        Assert.Equal(htmlErr, sceneErr);
         Assert.True(System.IO.File.Exists(sceneJsonOut));
-        Assert.Contains("\"Kind\"", System.IO.File.ReadAllText(sceneJsonOut));
+        string sceneJson = System.IO.File.ReadAllText(sceneJsonOut);
+        Assert.Contains("\"Kind\"", sceneJson);
+        Assert.DoesNotContain("tdbio: warning:", sceneJson, StringComparison.Ordinal);
 
         // 4. Export IFC to stdout
         var (stdoutIfcExit, stdoutIfc, stdoutIfcErr) = Run("export", okFile, "--ifc");
@@ -758,20 +763,22 @@ public sealed class CliTests : IDisposable
         // 2. IFC export succeeds
         var (ifcExit, ifcOut, ifcErr) = Run("export", nanoFile, "--ifc");
         Assert.Equal(Cli.ExitOk, ifcExit);
-        Assert.Empty(ifcErr);
+        Assert.StartsWith("tdbio: warning: 1 of 1 part uses rectangular proxy boxes", Assert.Single(Lines(ifcErr)));
+        Assert.DoesNotContain("tdbio: warning:", ifcOut, StringComparison.Ordinal);
         Assert.Contains("CUSTOM_NANO200", ifcOut);
 
-        // 3. Scene JSON export succeeds
+        // 3. Scene JSON export succeeds: the proxy box of the recognized profile is a warning on standard error only
         var (sceneExit, sceneOut, sceneErr) = Run("export", nanoFile, "--scene-json");
         Assert.Equal(Cli.ExitOk, sceneExit);
-        Assert.Empty(sceneErr);
+        Assert.Equal(ifcErr, sceneErr);
         Assert.Contains("CUSTOM_NANO200", sceneOut);
+        Assert.DoesNotContain("tdbio: warning:", sceneOut, StringComparison.Ordinal);
 
         // 4. HTML viewer export succeeds
         string htmlPath = Path.Combine(_folder, "custom_nano.html");
         var (htmlExit, _, htmlErr) = Run("export", nanoFile, htmlPath);
         Assert.Equal(Cli.ExitOk, htmlExit);
-        Assert.Empty(htmlErr);
+        Assert.Equal(sceneErr, htmlErr);
         Assert.True(System.IO.File.Exists(htmlPath));
         Assert.Contains("CUSTOM_NANO200", System.IO.File.ReadAllText(htmlPath));
     }
